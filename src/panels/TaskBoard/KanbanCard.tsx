@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { Task } from "../../store/tasks";
 import type { Agent } from "../../store/agents";
 import { TaskRunStateDot, type TaskRunState } from "../../components/TaskRunState";
@@ -7,17 +8,19 @@ interface KanbanCardProps {
   agents: Agent[];
   isActive: boolean;
   runState: TaskRunState;
-  onClick: () => void;
+  onClick: (taskId: string) => void;
 }
 
-export default function KanbanCard({ task, agents, isActive, runState, onClick }: KanbanCardProps) {
+// ⚡ Bolt Optimization: Memoize KanbanCard so it only re-renders when its specific
+// task data, assigned agent, or active state changes.
+export default memo(function KanbanCard({ task, agents, isActive, runState, onClick }: KanbanCardProps) {
   const agent = agents.find((a) => a.id === task.assigned_agent_id);
 
   return (
     <div
       onClick={(e) => {
         e.stopPropagation();
-        onClick();
+        onClick(task.id);
       }}
       style={{
         background: isActive ? "var(--bg-active)" : "var(--bg-elevated)",
@@ -79,4 +82,4 @@ export default function KanbanCard({ task, agents, isActive, runState, onClick }
       </div>
     </div>
   );
-}
+});

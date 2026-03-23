@@ -116,7 +116,7 @@ export default function KanbanColumn({
             agents={agents}
             isActive={task.id === activeTaskId}
             runState={taskRunStates[task.id] ?? "idle"}
-            onClick={() => onTaskClick(task.id)}
+            onClick={onTaskClick}
           />
         ))}
 
