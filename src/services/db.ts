@@ -7,8 +7,14 @@ import { Task, TaskEvent, TaskAttachment } from "../store/tasks";
 import { Agent, Session } from "../store/agents";
 import { v4 as uuidv4 } from "uuid";
 import { normalizeAgentModel } from "../registries/models.registry";
+import { AGENT_TYPES, getAgentDefaultModel } from "../registries/agents.registry";
 
 let _db: Database | null = null;
+
+const BUILT_IN_AGENT_NAMES: Record<string, string> = {
+  "agent-planner": "Patty the Planner",
+  "agent-builder": "Bob the Builder",
+};
 
 async function getDb(): Promise<Database> {
   if (!_db) {
@@ -147,21 +153,67 @@ export async function dbGetWorkspaceActivityCount(workspaceId: string): Promise<
 
 export async function dbListAgents(): Promise<Agent[]> {
   const db = await getDb();
+  const now = new Date().toISOString();
+
+  await Promise.all(
+    AGENT_TYPES.map((agentType) =>
+      db.execute(
+        `INSERT INTO agents (id, name, role, model, provider, approval_mode, system_prompt, config_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name=excluded.name,
+           role=excluded.role,
+           model=CASE
+             WHEN agents.model IS NULL OR TRIM(agents.model) = '' THEN excluded.model
+             ELSE agents.model
+           END,
+           provider=CASE
+             WHEN agents.provider IS NULL OR TRIM(agents.provider) = '' THEN excluded.provider
+             ELSE agents.provider
+           END,
+           approval_mode=CASE
+             WHEN agents.approval_mode IS NULL OR TRIM(agents.approval_mode) = '' THEN excluded.approval_mode
+             ELSE agents.approval_mode
+           END,
+           system_prompt=CASE
+             WHEN agents.system_prompt IS NULL OR TRIM(agents.system_prompt) = '' THEN excluded.system_prompt
+             ELSE agents.system_prompt
+           END,
+           updated_at=excluded.updated_at`,
+        [
+          agentType.id,
+          agentType.name,
+          agentType.role,
+          agentType.defaultModel,
+          agentType.defaultProvider,
+          agentType.defaultApprovalMode,
+          agentType.defaultSystemPrompt ?? null,
+          now,
+          now,
+        ]
+      )
+    )
+  );
+
   const agents = await db.select<Agent[]>(
     "SELECT id, name, role, model, provider, approval_mode, system_prompt, config_json, created_at, updated_at FROM agents ORDER BY name ASC"
   );
   const normalized = agents.map((agent) => {
-    const model = normalizeAgentModel(agent.model);
-    return model === agent.model ? agent : { ...agent, model };
+    const fallbackModel = getAgentDefaultModel(agent) ?? "gpt-5.4-mini";
+    const normalizedInputModel = typeof agent.model === "string" ? agent.model.trim() : "";
+    const model = normalizeAgentModel(normalizedInputModel || fallbackModel);
+    const expectedName = BUILT_IN_AGENT_NAMES[agent.id] ?? agent.name;
+    if (model === agent.model && expectedName === agent.name) return agent;
+    return { ...agent, model, name: expectedName };
   });
 
   await Promise.all(
     normalized
-      .filter((agent, index) => agent.model !== agents[index].model)
+      .filter((agent, index) => agent.model !== agents[index].model || agent.name !== agents[index].name)
       .map((agent) =>
         db.execute(
-          "UPDATE agents SET model = ?, updated_at = ? WHERE id = ?",
-          [agent.model, new Date().toISOString(), agent.id]
+          "UPDATE agents SET model = ?, name = ?, updated_at = ? WHERE id = ?",
+          [agent.model, agent.name, new Date().toISOString(), agent.id]
         )
       )
   );

@@ -27,7 +27,7 @@ export interface AgentTypeDef {
 export const AGENT_TYPES: AgentTypeDef[] = [
   {
     id: "agent-planner",
-    name: "Planner",
+    name: "Patty the Planner",
     role: "planner",
     defaultModel: "gpt-5.4-mini",
     defaultProvider: "openai",
@@ -51,7 +51,7 @@ export const AGENT_TYPES: AgentTypeDef[] = [
   },
   {
     id: "agent-builder",
-    name: "Bob (Builder)",
+    name: "Bob the Builder",
     role: "builder",
     defaultModel: "gpt-5.4",
     defaultProvider: "openai",
@@ -84,4 +84,12 @@ export function getAgentTypeDef(agent: Pick<Agent, "id" | "role">): AgentTypeDef
 
 export function getAgentWorkflow(agent: Pick<Agent, "id" | "role">): AgentWorkflow {
   return getAgentTypeDef(agent)?.workflow ?? DEFAULT_WORKFLOW;
+}
+
+export function getAgentDefaultModel(agent: Pick<Agent, "id" | "role">): string | undefined {
+  return getAgentTypeDef(agent)?.defaultModel;
+}
+
+export function getAgentDefaultSystemPrompt(agent: Pick<Agent, "id" | "role">): string | undefined {
+  return getAgentTypeDef(agent)?.defaultSystemPrompt;
 }

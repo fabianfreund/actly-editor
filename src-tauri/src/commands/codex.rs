@@ -49,17 +49,27 @@ pub async fn start_codex_server(
     let addr = format!("ws://127.0.0.1:{port}");
     let bin = codex_path.as_deref().filter(|s| !s.is_empty()).unwrap_or("codex");
 
+    eprintln!(
+        "[actly/codex] starting session={} bin={} cwd={} listen={}",
+        session_id, bin, project_path, addr
+    );
+
     let child = Command::new(bin)
         .arg("app-server")
         .arg("--listen")
         .arg(&addr)
         .current_dir(&project_path)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
         .spawn()
         .map_err(|e| format!("Failed to start codex app-server: {e}\nMake sure `codex` CLI is installed and in PATH."))?;
 
     let pid = child.id().unwrap_or(0);
+
+    eprintln!(
+        "[actly/codex] started session={} pid={} port={}",
+        session_id, pid, port
+    );
 
     // Store pid+port (release mutex before await)
     {
@@ -85,6 +95,10 @@ pub async fn stop_codex_server(
 
     if let Some(pid) = pid {
         if pid > 0 {
+            eprintln!(
+                "[actly/codex] stopping session={} pid={}",
+                session_id, pid
+            );
             // Kill by PID — avoids holding Child across await
             let _ = Command::new("kill")
                 .arg("-9")
@@ -103,4 +117,10 @@ pub fn get_codex_port(
 ) -> Result<Option<u16>, String> {
     let map = processes.0.lock().map_err(|e| e.to_string())?;
     Ok(map.get(&session_id).map(|(_, port)| *port))
+}
+
+#[tauri::command]
+pub fn debug_log(message: String) -> Result<(), String> {
+    eprintln!("[actly/frontend] {}", message);
+    Ok(())
 }

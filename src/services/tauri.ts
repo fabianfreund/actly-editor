@@ -18,6 +18,9 @@ export const codexCommands = {
 
   getPort: (sessionId: string) =>
     invoke<number | null>("get_codex_port", { sessionId }),
+
+  debugLog: (message: string) =>
+    invoke<void>("debug_log", { message }),
 };
 
 // ─── Git ──────────────────────────────────────────────────────────────────────

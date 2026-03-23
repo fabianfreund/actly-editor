@@ -46,6 +46,7 @@ pub fn run() {
             codex::start_codex_server,
             codex::stop_codex_server,
             codex::get_codex_port,
+            codex::debug_log,
             git::git_status,
             git::git_diff,
             git::git_stage,

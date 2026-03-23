@@ -154,13 +154,28 @@ export default function TaskDetail() {
     await updateTaskStatusWithActivity(task, status as Task["status"]);
   };
 
+  const getFreshAgents = useCallback(async () => {
+    const freshAgents = await dbListAgents().catch(() => agents);
+    setAgents(freshAgents);
+    return freshAgents;
+  }, [agents, setAgents]);
+
+  const getFreshAgentById = useCallback(async (agentId: string) => {
+    const freshAgents = await getFreshAgents();
+    return freshAgents.find((candidate) => candidate.id === agentId)
+      ?? agents.find((candidate) => candidate.id === agentId)
+      ?? null;
+  }, [agents, getFreshAgents]);
+
   const runTaskWithAgent = useCallback(async (agent: NonNullable<typeof agents[number]>, initialMessage?: string) => {
     if (!task || !projectPath) return;
+    const freshAgent = await getFreshAgentById(agent.id);
+    if (!freshAgent) return;
     await startAgent({
       taskId: task.id,
-      agentId: agent.id,
+      agentId: freshAgent.id,
       task,
-      agent,
+      agent: freshAgent,
       projectPath,
       codexPath,
       initialMessage,
@@ -168,7 +183,7 @@ export default function TaskDetail() {
         setSessions([...useAgentsStore.getState().sessions, session]);
       },
     });
-  }, [codexPath, projectPath, task, setSessions]);
+  }, [codexPath, projectPath, task, setSessions, getFreshAgentById]);
 
   const handleAgentChange = async (agentId: string) => {
     await saveField({ assigned_agent_id: agentId || null });
@@ -216,19 +231,23 @@ export default function TaskDetail() {
 
   // ── comment ──────────────────────────────────────────────────────────────────
 
-  const handleComment = async () => {
+  const handleComment = useCallback(async () => {
     if (!activeTaskId || !comment.trim()) return;
     const trimmedComment = comment.trim();
+    setComment("");
+    setMentionQuery(null);
     const event = await dbAddTaskEvent(activeTaskId, "user_comment", trimmedComment).catch(() => null);
     if (event) addEvent(event);
 
     const mentionMatch = trimmedComment.match(/(^|\s)@([a-zA-Z0-9_-]+)/);
     if (mentionMatch) {
       const mention = mentionMatch[2].toLowerCase();
+      const freshAgents = await getFreshAgents();
       const mentionedAgent =
-        agents.find((candidate) => candidate.id.replace(/^agent-/, "").toLowerCase() === mention) ??
-        agents.find((candidate) => candidate.role.toLowerCase() === mention) ??
-        agents.find((candidate) => candidate.name.toLowerCase().includes(mention));
+        freshAgents.find((candidate) => candidate.id === `agent-${mention}`) ??
+        freshAgents.find((candidate) => candidate.role.toLowerCase() === mention) ??
+        freshAgents.find((candidate) => candidate.id.replace(/^agent-/, "").toLowerCase() === mention) ??
+        freshAgents.find((candidate) => candidate.name.toLowerCase().includes(mention));
 
       if (mentionedAgent && task) {
         const prompt = trimmedComment.replace(mentionMatch[0], " ").trim();
@@ -239,10 +258,7 @@ export default function TaskDetail() {
         );
       }
     }
-
-    setComment("");
-    setMentionQuery(null);
-  };
+  }, [activeTaskId, addEvent, comment, getFreshAgents, runTaskWithAgent, task]);
 
   const handleClearActivity = async () => {
     if (!activeTaskId || !task || taskEvents.length === 0) return;
@@ -267,10 +283,11 @@ export default function TaskDetail() {
   const handleRestartTask = async () => {
     if (!task || !projectPath) return;
 
+    const freshAgents = await getFreshAgents();
     const agent =
-      agents.find((candidate) => candidate.id === task.assigned_agent_id) ??
-      agents.find((candidate) => candidate.role === "builder") ??
-      agents[0];
+      freshAgents.find((candidate) => candidate.id === task.assigned_agent_id) ??
+      freshAgents.find((candidate) => candidate.role === "builder") ??
+      freshAgents[0];
 
     if (!agent) return;
 
@@ -279,7 +296,7 @@ export default function TaskDetail() {
 
   const handleStartAssignedAgent = async () => {
     if (!pendingAssignedAgentId) return;
-    const agent = agents.find((candidate) => candidate.id === pendingAssignedAgentId);
+    const agent = await getFreshAgentById(pendingAssignedAgentId);
     if (!agent) return;
     await runTaskWithAgent(agent);
     setPendingAssignedAgentId(null);
@@ -523,7 +540,7 @@ export default function TaskDetail() {
           )}
 
           {/* Comment input */}
-          <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+          <div style={{ display: "flex", gap: 6, marginTop: 8, paddingBottom: 12 }}>
             <div style={{ position: "relative", flex: 1 }}>
               <input
                 ref={commentInputRef}

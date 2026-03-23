@@ -69,6 +69,8 @@ export default function AgentThread() {
 
   const handleSend = async () => {
     if (!message.trim() || !codexPort || !activeSession) return;
+    const nextMessage = message.trim();
+    setMessage("");
     const client = await getCodexClient(codexPort);
     await dbUpdateSession(activeSession.id, { status: "running" });
     setSessions(
@@ -76,10 +78,9 @@ export default function AgentThread() {
         session.id === activeSession.id ? { ...session, status: "running" } : session
       )
     );
-    await client.sendMessage(message.trim(), {
+    await client.sendMessage(nextMessage, {
       cwd: projectPath ?? undefined,
     });
-    setMessage("");
   };
 
   const handleApprovalDecision = async (requestId: string, decision: ApprovalDecision) => {

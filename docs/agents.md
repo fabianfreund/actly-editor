@@ -4,11 +4,11 @@
 
 | Name | Role | Default model | Purpose | Workflow |
 |---|---|---|---|---|
-| Planner | `planner` | `gpt-5.4-mini` | Refines tasks with repo context | `improving` → `planned` |
-| Bob (Builder) | `builder` | `gpt-5.4` | Implements tasks and ships changes | `in_progress` → `done` |
+| Patty the Planner | `planner` | `gpt-5.4-mini` | Refines tasks with repo context | `improving` → `planned` |
+| Bob the Builder | `builder` | `gpt-5.4` | Implements tasks and ships changes | `in_progress` → `done` |
 
 Actly normalizes legacy saved models to supported defaults:
-- Planner → `gpt-5.4-mini`
+- Patty the Planner → `gpt-5.4-mini`
 - Builder → `gpt-5.4`
 
 The Settings panel uses a dropdown of supported / already-used models instead of a free-text model field, which avoids unsupported values like `codex-1` for ChatGPT-account logins.

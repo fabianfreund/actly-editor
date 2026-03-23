@@ -11,7 +11,7 @@ import { useNotificationsStore } from "../store/notifications";
 import { codexCommands } from "./tauri";
 import { getCodexClient, type ApprovalRequest } from "./codex";
 import { dbCreateSession, dbUpdateSession, dbAddTaskEvent, dbUpdateTask } from "./db";
-import { getAgentWorkflow } from "../registries/agents.registry";
+import { getAgentDefaultModel, getAgentDefaultSystemPrompt, getAgentWorkflow } from "../registries/agents.registry";
 
 export interface StartAgentOptions {
   taskId: string;
@@ -33,6 +33,8 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
   const { taskId, agentId, task, agent, projectPath, codexPath,
           initialMessage, onSessionCreated, onApprovalRequest, onTurnCompleted } = opts;
   const workflow = getAgentWorkflow(agent);
+  const runtimeModel = agent.model?.trim() || getAgentDefaultModel(agent) || "gpt-5.4-mini";
+  const runtimeSystemPrompt = agent.system_prompt?.trim() || getAgentDefaultSystemPrompt(agent);
 
   const session = await dbCreateSession(taskId, agentId);
   const { setSessions, sessions } = useAgentsStore.getState();
@@ -42,7 +44,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
   const port = await codexCommands.startServer(session.id, projectPath, codexPath);
   useWorkspaceStore.getState().setCodexPort(port);
 
-  let currentTask = { ...task, status: workflow.startStatus };
+  let currentTask = { ...task };
   const { addEvent } = useAgentsStore.getState();
   const { addEvent: addTaskEvent } = useTasksStore.getState();
   const { addNotification } = useNotificationsStore.getState();
@@ -53,6 +55,8 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
     actor: string,
     activityContent?: string
   ) => {
+    const hasChanges = Object.entries(updates).some(([key, value]) => currentTask[key as keyof Task] !== value);
+    if (!hasChanges) return;
     currentTask = { ...currentTask, ...updates };
     await dbUpdateTask(taskIdToUpdate, updates).catch(() => null);
     useTasksStore.getState().upsertTask(currentTask);
@@ -240,7 +244,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
   try {
     const threadId = await client.createThread({
       workdir: projectPath,
-      model: agent.model,
+      model: runtimeModel,
       approval_mode: agent.approval_mode,
     });
 
@@ -254,16 +258,21 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
 
     await updateSessionStatus("running");
 
-    const msg = initialMessage?.trim()
+    const baseMessage = initialMessage?.trim()
       ? initialMessage.trim()
       : task.description
       ? `${task.title}\n\n${task.description}`
       : task.title;
+    const instructionBlock = [runtimeSystemPrompt, workflow.executionPrompt]
+      .filter(Boolean)
+      .join("\n\n");
+    const msg = instructionBlock
+      ? `${baseMessage}\n\nAgent instructions:\n${instructionBlock}`
+      : baseMessage;
     await client.sendMessage(msg, {
       cwd: projectPath,
-      model: agent.model,
+      model: runtimeModel,
       approval_mode: agent.approval_mode,
-      system_prompt: [agent.system_prompt, workflow.executionPrompt].filter(Boolean).join("\n\n") || undefined,
     });
   } catch (error) {
     await updateSessionStatus("failed");

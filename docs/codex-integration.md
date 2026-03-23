@@ -308,7 +308,7 @@ There is no `system_prompt` parameter on `thread/start`. In Actly, the `system_p
 ```jsonc
 {
   "collaborationMode": {
-    "mode": "developer",
+    "mode": "default",
     "settings": {
       "developer_instructions": "..."
     }

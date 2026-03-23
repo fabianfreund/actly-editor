@@ -7,6 +7,8 @@
  * Server approval requests use { id, method, params }.
  */
 
+import { codexCommands } from "./tauri";
+
 export type CodexEventType =
   | "thread.started"
   | "turn.started"
@@ -74,6 +76,7 @@ interface SendTurnOptions {
 }
 
 const REQUEST_TIMEOUT_MS = 10000;
+const CONNECT_TIMEOUT_MS = 10000;
 
 export class CodexClient {
   private ws: WebSocket | null = null;
@@ -82,6 +85,7 @@ export class CodexClient {
   private pendingCallbacks: Map<number, (result: unknown, error?: unknown) => void> = new Map();
   private currentThreadId: string | null = null;
   private currentTurnId: string | null = null;
+  private currentModel: string | null = null;
   readonly port: number;
 
   constructor(port: number) {
@@ -90,14 +94,26 @@ export class CodexClient {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      const connectTimeout = window.setTimeout(() => {
+        this.debug(`connect timeout port=${this.port}`);
+        reject(new Error(`Codex connection timed out on port ${this.port}`));
+      }, CONNECT_TIMEOUT_MS);
       const ws = new WebSocket(`ws://127.0.0.1:${this.port}`);
       this.ws = ws;
+      this.debug(`connecting port=${this.port}`);
 
-      ws.onerror = (e) => reject(new Error(`Codex WS error: ${JSON.stringify(e)}`));
+      ws.onerror = (e) => {
+        window.clearTimeout(connectTimeout);
+        this.debug(`ws error port=${this.port} detail=${this.stringifyForLog(e)}`);
+        reject(new Error(`Codex WS error: ${JSON.stringify(e)}`));
+      };
 
       ws.onclose = () => {
+        window.clearTimeout(connectTimeout);
         this.currentThreadId = null;
         this.currentTurnId = null;
+        this.currentModel = null;
+        this.debug(`ws closed port=${this.port}`);
         this.dispatch({ type: "error", message: "Connection closed" });
       };
 
@@ -111,16 +127,21 @@ export class CodexClient {
       };
 
       ws.onopen = () => {
+        this.debug(`ws open port=${this.port}`);
         // Required initialize handshake before sending any other messages
         const id = ++this.messageId;
         this.pendingCallbacks.set(id, (_result, error) => {
+          window.clearTimeout(connectTimeout);
           if (error) {
+            this.debug(`initialize failed port=${this.port} error=${this.stringifyForLog(error)}`);
             reject(new Error(`Codex initialize failed: ${JSON.stringify(error)}`));
             return;
           }
+          this.debug(`initialize ok port=${this.port}`);
           ws.send(JSON.stringify({ method: "initialized" }));
           resolve();
         });
+        this.debug(`request initialize port=${this.port}`);
         ws.send(JSON.stringify({
           id,
           method: "initialize",
@@ -142,6 +163,9 @@ export class CodexClient {
   disconnect() {
     this.ws?.close();
     this.ws = null;
+    this.currentThreadId = null;
+    this.currentTurnId = null;
+    this.currentModel = null;
   }
 
   on(eventType: string, handler: EventHandler) {
@@ -156,6 +180,7 @@ export class CodexClient {
   }
 
   private handleMessage(data: Record<string, unknown>) {
+    this.debug(`recv port=${this.port} ${this.stringifyForLog(data)}`);
     // Response to our request: { id, result } or { id, error }
     if ("id" in data && ("result" in data || "error" in data) && !("method" in data)) {
       const id = data.id as number;
@@ -540,14 +565,17 @@ export class CodexClient {
   private request<T>(method: string, params: unknown = {}): Promise<T> {
     return new Promise((resolve, reject) => {
       const id = ++this.messageId;
+      this.debug(`request port=${this.port} id=${id} method=${method} params=${this.stringifyForLog(params)}`);
       const timeout = window.setTimeout(() => {
         this.pendingCallbacks.delete(id);
+        this.debug(`request timeout port=${this.port} id=${id} method=${method}`);
         reject(new Error(`Codex request timed out: ${method}`));
       }, REQUEST_TIMEOUT_MS);
 
       this.pendingCallbacks.set(id, (result, error) => {
         window.clearTimeout(timeout);
         if (error) {
+          this.debug(`request error port=${this.port} id=${id} method=${method} error=${this.stringifyForLog(error)}`);
           const rpcError = error as { code?: number; message?: string } | string;
           reject(new Error(
             typeof rpcError === "string"
@@ -556,10 +584,23 @@ export class CodexClient {
           ));
           return;
         }
+        this.debug(`request ok port=${this.port} id=${id} method=${method} result=${this.stringifyForLog(result)}`);
         resolve(result as T);
       });
       this.ws?.send(JSON.stringify({ id, method, params }));
     });
+  }
+
+  private debug(message: string) {
+    void codexCommands.debugLog(message).catch(() => undefined);
+  }
+
+  private stringifyForLog(value: unknown): string {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
   }
 
   private mapApprovalMode(approvalMode?: string): string | undefined {
@@ -575,18 +616,11 @@ export class CodexClient {
   private buildTurnOverrides(params: SendTurnOptions = {}): Record<string, unknown> {
     const turnParams: Record<string, unknown> = {};
     const approvalPolicy = this.mapApprovalMode(params.approval_mode);
+    const model = params.model ?? this.currentModel;
 
     if (params.cwd) turnParams.cwd = params.cwd;
-    if (params.model) turnParams.model = params.model;
+    if (model) turnParams.model = model;
     if (approvalPolicy) turnParams.approvalPolicy = approvalPolicy;
-    if (params.system_prompt) {
-      turnParams.collaborationMode = {
-        mode: "developer",
-        settings: {
-          developer_instructions: params.system_prompt,
-        },
-      };
-    }
 
     return turnParams;
   }
@@ -594,18 +628,22 @@ export class CodexClient {
   /** Start a new agent thread. */
   async createThread(params: {
     workdir: string;
-    model?: string;
+    model: string;
     approval_mode?: string;
   }): Promise<string> {
     const approvalPolicy = this.mapApprovalMode(params.approval_mode);
+    const model = params.model?.trim();
+    if (!model) {
+      throw new Error("Cannot start a Codex thread without a model");
+    }
 
     const threadParams: Record<string, unknown> = {
       cwd: params.workdir,
       serviceName: "actly-editor",
       ephemeral: true,
+      model,
     };
     if (approvalPolicy) threadParams.approvalPolicy = approvalPolicy;
-    if (params.model) threadParams.model = params.model;
 
     const result = await this.request<ThreadStartResult>("thread/start", threadParams);
     const threadId = result.thread?.id;
@@ -613,6 +651,7 @@ export class CodexClient {
       throw new Error("Codex did not return a thread ID from thread/start");
     }
     this.currentThreadId = threadId;
+    this.currentModel = model;
     return threadId;
   }
 
@@ -628,13 +667,18 @@ export class CodexClient {
     if (!this.currentThreadId) {
       throw new Error("Cannot start a turn before a Codex thread is active");
     }
+    const model = options.model ?? this.currentModel;
+    if (!model) {
+      throw new Error("Cannot start a Codex turn without a model");
+    }
     const result = await this.request<TurnResult>("turn/start", {
       threadId: this.currentThreadId,
       input: [{ type: "text", text: content }],
-      ...this.buildTurnOverrides(options),
+      ...this.buildTurnOverrides({ ...options, model }),
     });
     const turnId = result.turn?.id ?? result.turnId ?? null;
     if (turnId) this.currentTurnId = turnId;
+    this.currentModel = model;
     return turnId;
   }
 
