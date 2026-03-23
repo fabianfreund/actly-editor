@@ -1,27 +1,242 @@
-import { useEffect, useRef } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { listen } from "@tauri-apps/api/event";
+import { RefreshCw, SquareTerminal, X } from "lucide-react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useWorkspaceStore } from "../../store/workspace";
-import { useAgentsStore } from "../../store/agents";
-import { getCodexClient } from "../../services/codex";
+import {
+  useTerminalStore,
+  type TerminalTab,
+} from "../../store/terminal";
+import {
+  terminalCommands,
+  type TerminalDataEvent,
+  type TerminalExitEvent,
+} from "../../services/tauri";
+
+type TerminalStatus = "idle" | "starting" | "ready" | "error" | "closed";
+
+interface TerminalTabHandle {
+  clear: () => void;
+  focus: () => void;
+}
+
+function createSessionId(tabId: string) {
+  return `${tabId}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+}
 
 export default function Terminal() {
-  const termRef = useRef<HTMLDivElement>(null);
+  const tabHandlesRef = useRef<Record<string, TerminalTabHandle | null>>({});
+  const { projectPath } = useWorkspaceStore();
+  const { tabs, activeTabId, initializeWorkspace, setActiveTab, closeTab, restartTab } =
+    useTerminalStore();
+  const [statuses, setStatuses] = useState<Record<string, TerminalStatus>>({});
+
+  useEffect(() => {
+    if (!projectPath) return;
+    initializeWorkspace(projectPath);
+  }, [initializeWorkspace, projectPath]);
+
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null,
+    [activeTabId, tabs]
+  );
+
+  useEffect(() => {
+    if (!activeTabId) return;
+    tabHandlesRef.current[activeTabId]?.focus();
+  }, [activeTabId]);
+
+  if (!projectPath || tabs.length === 0 || !activeTab) {
+    return (
+      <div
+        className="panel-full"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "var(--text-muted)",
+          fontSize: "var(--font-size-sm)",
+        }}
+      >
+        Open a project to start a terminal
+      </div>
+    );
+  }
+
+  return (
+    <div className="panel-full">
+      <div className="panel-header">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            minWidth: 0,
+            color: "var(--text-secondary)",
+            fontSize: "var(--font-size-xs)",
+          }}
+        >
+          <SquareTerminal size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+          <span>{activeTab.label}</span>
+          <span
+            style={{
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              color: "var(--text-muted)",
+            }}
+          >
+            {activeTab.cwd}
+          </span>
+          <span style={{ color: "var(--text-muted)", textTransform: "capitalize" }}>
+            {statuses[activeTab.id] ?? "idle"}
+          </span>
+        </div>
+
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "2px 6px", fontSize: "var(--font-size-xs)" }}
+            onClick={() => tabHandlesRef.current[activeTab.id]?.clear()}
+          >
+            Clear
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "2px 6px" }}
+            onClick={() => restartTab(activeTab.id)}
+            title="Restart tab"
+          >
+            <RefreshCw size={12} />
+          </button>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          padding: "6px 8px 0",
+          borderBottom: "1px solid var(--border-default)",
+          flexShrink: 0,
+          overflowX: "auto",
+        }}
+      >
+        {tabs.map((tab) => {
+          const isActive = tab.id === activeTab.id;
+          return (
+            <button
+              key={tab.id}
+              className="btn btn-ghost"
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 10px",
+                borderRadius: "6px 6px 0 0",
+                border: "1px solid var(--border-default)",
+                borderBottomColor: isActive ? "var(--bg-base)" : "var(--border-default)",
+                background: isActive ? "var(--bg-base)" : "var(--bg-elevated)",
+                color: isActive ? "var(--text-primary)" : "var(--text-muted)",
+                flexShrink: 0,
+              }}
+            >
+              <span>{tab.label}</span>
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background:
+                    statuses[tab.id] === "ready"
+                      ? "var(--status-done)"
+                      : statuses[tab.id] === "starting"
+                      ? "var(--text-info)"
+                      : statuses[tab.id] === "error"
+                      ? "var(--text-error)"
+                      : "var(--text-muted)",
+                }}
+              />
+              {tab.closable && (
+                <span
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                  style={{ display: "inline-flex", color: "var(--text-muted)" }}
+                  title="Close tab"
+                >
+                  <X size={12} />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+        {tabs.map((tab) => (
+          <TerminalTabView
+            key={tab.id}
+            ref={(handle) => {
+              tabHandlesRef.current[tab.id] = handle;
+            }}
+            tab={tab}
+            active={tab.id === activeTab.id}
+            setStatuses={setStatuses}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const TerminalTabView = forwardRef<
+  TerminalTabHandle,
+  {
+    tab: TerminalTab;
+    active: boolean;
+    setStatuses: Dispatch<SetStateAction<Record<string, TerminalStatus>>>;
+  }
+>(function TerminalTabView({ tab, active, setStatuses }, ref) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const { codexPort, activeTaskId } = useWorkspaceStore();
-  const { events, sessions } = useAgentsStore();
+  const sessionIdRef = useRef<string | null>(null);
 
-  // Initialize xterm
+  const updateStatus = (status: TerminalStatus) => {
+    setStatuses((current) => ({ ...current, [tab.id]: status }));
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      clear: () => xtermRef.current?.clear(),
+      focus: () => xtermRef.current?.focus(),
+    }),
+    []
+  );
+
   useEffect(() => {
-    if (!termRef.current || xtermRef.current) return;
+    if (!containerRef.current || xtermRef.current) return;
 
     const term = new XTerm({
       theme: {
         background: "#1e1e1e",
-        foreground: "#cccccc",
-        cursor: "#cccccc",
+        foreground: "#d4d4d4",
+        cursor: "#d4d4d4",
         selectionBackground: "#264f78",
         black: "#1e1e1e",
         red: "#f44747",
@@ -38,23 +253,20 @@ export default function Terminal() {
         brightBlue: "#9cdcfe",
         brightMagenta: "#c586c0",
         brightCyan: "#4ec9b0",
-        brightWhite: "#d4d4d4",
+        brightWhite: "#ffffff",
       },
       fontFamily: "var(--font-mono)",
       fontSize: 12,
       lineHeight: 1.4,
       cursorBlink: true,
-      allowTransparency: false,
       scrollback: 5000,
+      allowTransparency: false,
     });
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
-    term.open(termRef.current);
+    term.open(containerRef.current);
     fitAddon.fit();
-
-    term.writeln("\x1b[1;34m── Actly Terminal ──\x1b[0m");
-    term.writeln("\x1b[90mWaiting for agent activity…\x1b[0m\r\n");
 
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -62,78 +274,157 @@ export default function Terminal() {
     return () => {
       term.dispose();
       xtermRef.current = null;
+      fitAddonRef.current = null;
     };
   }, []);
 
-  // Resize observer
   useEffect(() => {
-    if (!termRef.current) return;
-    const ro = new ResizeObserver(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver(() => {
+      if (!active) return;
       fitAddonRef.current?.fit();
     });
-    ro.observe(termRef.current);
-    return () => ro.disconnect();
-  }, []);
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [active]);
 
-  // Mirror codex command_exec events to terminal
   useEffect(() => {
-    if (!codexPort || !activeTaskId) return;
-    const activeSession = sessions.find(
-      (s) => s.task_id === activeTaskId && s.status !== "completed"
-    );
-    if (!activeSession) return;
-
-    const sessionEvents = events[activeSession.id] ?? [];
     const term = xtermRef.current;
-    if (!term) return;
+    const fitAddon = fitAddonRef.current;
+    if (!term || !fitAddon) return;
 
-    // Only process the last event (already rendered previous ones)
-    const last = sessionEvents[sessionEvents.length - 1];
-    if (!last) return;
+    let cancelled = false;
+    let unlistenData: (() => void) | undefined;
+    let unlistenExit: (() => void) | undefined;
 
-    const payload = last.payload as Record<string, unknown>;
-    if (last.type === "item.command_exec" && payload.item) {
-      const item = payload.item as Record<string, unknown>;
-      const cmd = (item.command as string[])?.join(" ") ?? "";
-      const output = item.output as string ?? "";
-      term.writeln(`\x1b[1;36m$ ${cmd}\x1b[0m`);
-      if (output) {
-        output.split("\n").forEach((line) => term.writeln(line));
+    const sessionId = createSessionId(tab.id);
+    sessionIdRef.current = sessionId;
+
+    const inputListener = term.onData((data) => {
+      if (sessionIdRef.current !== sessionId) return;
+      terminalCommands.write(sessionId, data).catch(() => undefined);
+    });
+
+    const resizeListener = term.onResize(({ cols, rows }) => {
+      if (sessionIdRef.current !== sessionId) return;
+      terminalCommands.resize(sessionId, cols, rows).catch(() => undefined);
+    });
+
+    const boot = async () => {
+      updateStatus("starting");
+      term.reset();
+      term.clear();
+      term.write(`\x1b[1;34m── ${tab.label} ──\x1b[0m\r\n`);
+      term.write(`\x1b[90m${tab.cwd}\x1b[0m\r\n`);
+      if (tab.command) {
+        term.write(
+          `\x1b[90m$ ${[tab.command, ...(tab.args ?? [])].join(" ")}\x1b[0m\r\n\r\n`
+        );
+      } else {
+        term.write("\r\n");
       }
-    } else if (last.type === "item.file_change" && payload.item) {
-      const item = payload.item as Record<string, unknown>;
-      term.writeln(`\x1b[33m[file] ${item.path as string}\x1b[0m`);
-    } else if (last.type === "turn.started") {
-      term.writeln(`\x1b[90m[agent] thinking…\x1b[0m`);
-    } else if (last.type === "turn.completed") {
-      term.writeln(`\x1b[32m[agent] done\x1b[0m`);
-    } else if (last.type === "turn.failed") {
-      term.writeln(`\x1b[31m[agent] failed: ${payload.message ?? ""}\x1b[0m`);
+
+      try {
+        const [stopData, stopExit] = await Promise.all([
+          listen<TerminalDataEvent>("terminal:data", (event) => {
+            if (event.payload.session_id !== sessionId || cancelled) return;
+            xtermRef.current?.write(event.payload.data);
+          }),
+          listen<TerminalExitEvent>("terminal:exit", (event) => {
+            if (event.payload.session_id !== sessionId || cancelled) return;
+            updateStatus("closed");
+            xtermRef.current?.write(
+              `\r\n\x1b[90m[process exited with code ${event.payload.code}]\x1b[0m\r\n`
+            );
+          }),
+        ]);
+
+        if (cancelled) {
+          stopData();
+          stopExit();
+          return;
+        }
+
+        unlistenData = stopData;
+        unlistenExit = stopExit;
+
+        fitAddon.fit();
+        await terminalCommands.start(
+          sessionId,
+          tab.cwd,
+          Math.max(term.cols, 20),
+          Math.max(term.rows, 8),
+          tab.command,
+          tab.args
+        );
+
+        if (!cancelled) updateStatus("ready");
+      } catch (error) {
+        if (cancelled) return;
+        updateStatus("error");
+        term.write(`\x1b[31mFailed to start terminal: ${String(error)}\x1b[0m\r\n`);
+      }
+    };
+
+    void boot();
+
+    return () => {
+      cancelled = true;
+      inputListener.dispose();
+      resizeListener.dispose();
+      unlistenData?.();
+      unlistenExit?.();
+      if (sessionIdRef.current === sessionId) {
+        sessionIdRef.current = null;
+      }
+      terminalCommands.stop(sessionId).catch(() => undefined);
+    };
+  }, [
+    setStatuses,
+    tab.args,
+    tab.command,
+    tab.cwd,
+    tab.id,
+    tab.label,
+    tab.restartNonce,
+  ]);
+
+  useEffect(() => {
+    if (!active) return;
+    const term = xtermRef.current;
+    const fitAddon = fitAddonRef.current;
+    if (!term || !fitAddon) return;
+
+    fitAddon.fit();
+    term.focus();
+    const sessionId = sessionIdRef.current;
+    if (sessionId) {
+      terminalCommands
+        .resize(sessionId, Math.max(term.cols, 20), Math.max(term.rows, 8))
+        .catch(() => undefined);
     }
-  }, [events, activeTaskId, sessions, codexPort]);
+  }, [active]);
 
   return (
-    <div className="panel-full">
-      <div className="panel-header">
-        <button
-          className="btn btn-ghost"
-          style={{ marginLeft: "auto", padding: "2px 6px", fontSize: "var(--font-size-xs)" }}
-          onClick={() => {
-            xtermRef.current?.clear();
-          }}
-        >
-          Clear
-        </button>
-      </div>
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: active ? "block" : "none",
+        padding: 4,
+        background: "#1e1e1e",
+      }}
+      onClick={() => xtermRef.current?.focus()}
+    >
       <div
-        ref={termRef}
+        ref={containerRef}
         style={{
-          flex: 1,
-          padding: "4px",
-          background: "#1e1e1e",
+          width: "100%",
+          height: "100%",
           overflow: "hidden",
+          cursor: "text",
         }}
       />
     </div>
   );
-}
+});

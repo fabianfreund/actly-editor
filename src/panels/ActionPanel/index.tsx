@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Play, Plus, Trash2 } from "lucide-react";
+import { Play, Plus, Rocket, Trash2 } from "lucide-react";
 import { useWorkspaceStore } from "../../store/workspace";
 import { useActionsStore } from "../../store/actions";
+import { useTerminalStore } from "../../store/terminal";
+import { useUiStore } from "../../store/ui";
 
 export interface ActionDef {
   id: string;
@@ -11,36 +13,23 @@ export interface ActionDef {
 }
 
 export default function ActionPanel() {
-  const { projectPath } = useWorkspaceStore();
+  const { activeId, projectPath } = useWorkspaceStore();
   const { actions, saveActions } = useActionsStore();
-  const [running, setRunning] = useState<string | null>(null);
-  const [output, setOutput] = useState<Record<string, string>>({});
+  const { initializeWorkspace, addCommandTab } = useTerminalStore();
+  const { setMode } = useUiStore();
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ label: "", command: "", args: "" });
 
-  const handleRun = async (action: ActionDef) => {
-    if (!projectPath || running) return;
-    setRunning(action.id);
-    setOutput((prev) => ({ ...prev, [action.id]: "" }));
-
-    try {
-      const { Command } = await import("@tauri-apps/plugin-shell");
-      const args = action.args ?? [];
-      const cmd = Command.create(action.command, args, { cwd: projectPath });
-
-      cmd.stdout.on("data", (data: string) => {
-        setOutput((prev) => ({ ...prev, [action.id]: (prev[action.id] ?? "") + data }));
-      });
-      cmd.stderr.on("data", (data: string) => {
-        setOutput((prev) => ({ ...prev, [action.id]: (prev[action.id] ?? "") + data }));
-      });
-
-      await cmd.execute();
-    } catch (e) {
-      setOutput((prev) => ({ ...prev, [action.id]: String(e) }));
-    } finally {
-      setRunning(null);
-    }
+  const handleRun = (action: ActionDef) => {
+    if (!projectPath) return;
+    initializeWorkspace(projectPath);
+    addCommandTab({
+      label: action.label,
+      cwd: projectPath,
+      command: action.command,
+      args: action.args,
+    });
+    setMode("develop", activeId);
   };
 
   const handleRemove = (id: string) => {
@@ -65,6 +54,21 @@ export default function ActionPanel() {
 
   return (
     <div className="panel-full">
+      <div className="panel-header">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            color: "var(--text-secondary)",
+            fontSize: "var(--font-size-xs)",
+          }}
+        >
+          <Rocket size={12} style={{ color: "var(--text-muted)" }} />
+          <span>Actions</span>
+        </div>
+      </div>
+
       <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {actions.length === 0 && !adding && (
           <div
@@ -87,20 +91,16 @@ export default function ActionPanel() {
               <button
                 className="btn btn-ghost"
                 onClick={() => handleRun(action)}
-                disabled={!projectPath || running === action.id}
+                disabled={!projectPath}
                 style={{
                   flex: 1,
                   justifyContent: "flex-start",
                   padding: "6px 10px",
-                  background: running === action.id ? "var(--bg-active)" : undefined,
                 }}
               >
                 <Play
                   size={12}
-                  style={{
-                    color: running === action.id ? "var(--accent)" : "var(--text-muted)",
-                    animation: running === action.id ? "spin 1s linear infinite" : "none",
-                  }}
+                  style={{ color: "var(--text-muted)" }}
                 />
                 <span>{action.label}</span>
                 <span
@@ -124,25 +124,6 @@ export default function ActionPanel() {
               </button>
             </div>
 
-            {output[action.id] && (
-              <pre
-                style={{
-                  margin: "4px 0 0",
-                  padding: "4px 8px",
-                  background: "var(--bg-elevated)",
-                  borderRadius: 3,
-                  fontSize: "var(--font-size-xs)",
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--text-secondary)",
-                  maxHeight: 120,
-                  overflow: "auto",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                }}
-              >
-                {output[action.id]}
-              </pre>
-            )}
           </div>
         ))}
 

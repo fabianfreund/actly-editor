@@ -23,6 +23,46 @@ export const codexCommands = {
     invoke<void>("debug_log", { message }),
 };
 
+// ─── Terminal ────────────────────────────────────────────────────────────────
+
+export const terminalCommands = {
+  start: (
+    sessionId: string,
+    cwd: string,
+    cols: number,
+    rows: number,
+    command?: string,
+    args?: string[]
+  ) =>
+    invoke<void>("start_terminal_session", {
+      sessionId,
+      cwd,
+      cols,
+      rows,
+      command: command ?? null,
+      args: args ?? null,
+    }),
+
+  stop: (sessionId: string) =>
+    invoke<void>("stop_terminal_session", { sessionId }),
+
+  write: (sessionId: string, data: string) =>
+    invoke<void>("write_terminal_session", { sessionId, data }),
+
+  resize: (sessionId: string, cols: number, rows: number) =>
+    invoke<void>("resize_terminal_session", { sessionId, cols, rows }),
+};
+
+export interface TerminalDataEvent {
+  session_id: string;
+  data: string;
+}
+
+export interface TerminalExitEvent {
+  session_id: string;
+  code: number;
+}
+
 // ─── Git ──────────────────────────────────────────────────────────────────────
 
 export interface GitFile {

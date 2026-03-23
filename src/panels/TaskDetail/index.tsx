@@ -11,7 +11,7 @@ import {
   dbClearTaskEvents,
 } from "../../services/db";
 import { navigateMode } from "../../services/layoutEvents";
-import { startAgent } from "../../services/agentRunner";
+import { startAgent, stopTaskSessions } from "../../services/agentRunner";
 import { updateTaskStatusWithActivity } from "../../services/taskActivity";
 import { FormattedText } from "../../components/FormattedText";
 
@@ -274,9 +274,9 @@ export default function TaskDetail() {
     const confirmed = window.confirm(`Delete task "${task.title}"? This cannot be undone.`);
     if (!confirmed) return;
 
+    await stopTaskSessions(task.id);
     await dbDeleteTask(task.id);
     removeTask(task.id);
-    setSessions(sessions.filter((session) => session.task_id !== task.id));
     setActiveTaskId(null);
   };
 

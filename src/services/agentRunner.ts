@@ -283,6 +283,25 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
   }
 }
 
+export async function stopTaskSessions(taskId: string): Promise<void> {
+  const { sessions, setSessions, clearEvents } = useAgentsStore.getState();
+  const taskSessions = sessions.filter((session) => session.task_id === taskId);
+
+  await Promise.all(
+    taskSessions.map((session) =>
+      codexCommands.stopServer(session.id).catch(() => undefined)
+    )
+  );
+
+  taskSessions.forEach((session) => clearEvents(session.id));
+  setSessions(sessions.filter((session) => session.task_id !== taskId));
+
+  const workspaceStore = useWorkspaceStore.getState();
+  if (workspaceStore.activeTaskId === taskId) {
+    workspaceStore.setCodexPort(null);
+  }
+}
+
 function extractTaskUpdate(message: string): { cleanMessage: string; title?: string; description?: string } | null {
   const match = message.match(/<task_update>\s*([\s\S]*?)\s*<\/task_update>/i);
   if (!match) return null;

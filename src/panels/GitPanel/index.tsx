@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GitCommit, RefreshCw, Plus, Minus } from "lucide-react";
+import { Github, GitCommit, RefreshCw, Plus } from "lucide-react";
 import { useWorkspaceStore } from "../../store/workspace";
 import { gitCommands, GitFile, GitDiff } from "../../services/tauri";
 
@@ -83,6 +83,18 @@ export default function GitPanel() {
   return (
     <div className="panel-full">
       <div className="panel-header">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            color: "var(--text-secondary)",
+            fontSize: "var(--font-size-xs)",
+          }}
+        >
+          <Github size={12} style={{ color: "var(--text-muted)" }} />
+          <span>Git</span>
+        </div>
         <button
           className="btn btn-ghost"
           style={{ marginLeft: "auto", padding: "2px 6px" }}

@@ -2,7 +2,8 @@ mod commands;
 mod db;
 
 use commands::codex::CodexProcesses;
-use commands::{codex, fs_helpers, git};
+use commands::terminal::TerminalSessions;
+use commands::{codex, fs_helpers, git, terminal};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri_plugin_sql::{Builder as SqlBuilder, Migration, MigrationKind};
@@ -41,6 +42,7 @@ pub fn run() {
                 .build(),
         )
         .manage(CodexProcesses(Mutex::new(HashMap::new())))
+        .manage(TerminalSessions(Mutex::new(HashMap::new())))
         .invoke_handler(tauri::generate_handler![
             codex::check_codex_path,
             codex::start_codex_server,
@@ -52,6 +54,10 @@ pub fn run() {
             git::git_stage,
             git::git_commit,
             git::git_branches,
+            terminal::start_terminal_session,
+            terminal::stop_terminal_session,
+            terminal::write_terminal_session,
+            terminal::resize_terminal_session,
             fs_helpers::fs_exists,
             fs_helpers::fs_read_text,
             fs_helpers::fs_write_text,
