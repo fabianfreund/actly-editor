@@ -1,10 +1,12 @@
 # Actly Editor
 
-Desktop AI coding workspace built with Tauri, React, and TypeScript.
+Vibecode your app in a desktop workspace built for planning, building, and launching with AI.
 
-Actly Editor gives you a task-driven interface for working with coding agents inside a real desktop app. You can open a repository, break work into tasks, assign different agents to different stages, review approvals inline, inspect terminal output, and keep project context visible in one dockable workspace.
+Actly Editor is a Jira-meets-IDE workspace for shipping apps with coding agents. Instead of bouncing between tickets, chat, terminal tabs, and deployment notes, you get one desktop app where the plan, the builders, the terminal, and the project context all stay in view.
 
-It is designed around a simple idea: planning, implementation, and review should feel like parts of the same workspace instead of separate tools. Patty the Planner can improve and rewrite tasks with repo-aware context, while Bob the Builder can execute implementation work and move tasks through delivery.
+Open a repo, turn ideas into tasks, let AI agents refine and implement them, review approvals inline, run project actions, and keep momentum all the way from rough concept to launch. Patty the Planner rewrites vague work into repo-aware tasks, while Bob the Builder executes inside the same workspace so planning, development, and launch feel like one continuous flow.
+
+![Actly Editor screenshot](docs/images/header_image.jpg)
 
 ![Status: MVP](https://img.shields.io/badge/status-MVP-blue)
 
@@ -112,6 +114,13 @@ actly-editor/
 - [Panels](docs/panels.md)
 - [Agents](docs/agents.md)
 - [Codex Integration](docs/codex-integration.md)
+
+## Roadmap
+
+- Direct GitHub integration for issues, PR context, and repo workflows
+- More built-in agents for planning, implementation, review, and launch flows
+- Browser integrations for live app inspection and web automation workflows
+- More model providers, including providers like Minimax
 
 ## License
 
