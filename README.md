@@ -1,10 +1,15 @@
 # Actly Editor
 
+> [!NOTE]
+> Working desktop builds are coming in the next few days.
+
 Vibecode your app in a desktop workspace built for planning, building, and launching with AI.
 
 Actly Editor is a Jira-meets-IDE workspace for shipping apps with coding agents. Instead of bouncing between tickets, chat, terminal tabs, and deployment notes, you get one desktop app where the plan, the builders, the terminal, and the project context all stay in view.
 
 Open a repo, turn ideas into tasks, let AI agents refine and implement them, review approvals inline, run project actions, and keep momentum all the way from rough concept to launch. Patty the Planner rewrites vague work into repo-aware tasks, while Bob the Builder executes inside the same workspace so planning, development, and launch feel like one continuous flow.
+
+Follow progress and build updates on X: [@FabianXR_Builds](https://x.com/FabianXR_Builds)
 
 ![Actly Editor screenshot](docs/images/header_image.jpg)
 
@@ -124,15 +129,8 @@ actly-editor/
 
 ## License
 
-This project is open and free to use for both personal and professional work.
+This repository now includes a dedicated [LICENSE](LICENSE) file.
 
-You may use, modify, and deploy it internally, but you may **not** resell the software itself or redistribute it as a paid competing product without explicit permission.
-
-In other words:
-
-- personal use is allowed
-- professional and commercial internal use is allowed
-- modification is allowed
-- resale of the software itself is not allowed
-
-If you want stricter legal wording, add a dedicated `LICENSE` file with the final license text used for distribution.
+In short: personal use, commercial internal use, modification, and internal
+deployment are allowed. Resale or commercialization of the software itself is
+not allowed without explicit written permission.
