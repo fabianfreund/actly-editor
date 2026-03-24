@@ -13,7 +13,7 @@ interface KanbanColumnProps {
   activeTaskId: string | null;
   taskRunStates: Record<string, TaskRunState>;
   onTaskClick: (taskId: string) => void;
-  onAddTask: (title: string) => void;
+  onAddTask: (title: string, status: TaskStatus) => void;
 }
 
 export default function KanbanColumn({
@@ -32,7 +32,7 @@ export default function KanbanColumn({
   const handleAdd = () => {
     const trimmed = draft.trim();
     if (trimmed) {
-      onAddTask(trimmed);
+      onAddTask(trimmed, status);
     }
     setDraft("");
     setAdding(false);

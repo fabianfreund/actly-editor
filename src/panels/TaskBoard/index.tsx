@@ -39,11 +39,11 @@ export default function TaskBoard() {
   // ⚡ Bolt Optimization: Stabilize callbacks to prevent all TaskRow items
   // from re-rendering on every local state update or task selection change in TaskBoard.
   const handleStatusChange = useCallback(async (taskId: string, status: string) => {
-    const task = tasks.find(t => t.id === taskId);
+    const task = useTasksStore.getState().tasks.find(t => t.id === taskId);
     if (task) {
       await updateTaskStatusWithActivity(task, status as Task["status"]);
     }
-  }, [tasks]);
+  }, []);
 
   const handleTaskClick = useCallback((taskId: string) => {
     setActiveTaskId(taskId);

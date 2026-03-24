@@ -72,7 +72,7 @@ export default function KanbanBoard() {
           activeTaskId={activeTaskId}
           taskRunStates={taskRunStates}
           onTaskClick={handleTaskClick}
-          onAddTask={(title) => handleAddTask(title, status)}
+          onAddTask={handleAddTask}
         />
       ))}
     </div>
