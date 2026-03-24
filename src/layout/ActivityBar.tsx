@@ -1,4 +1,4 @@
-import { Bell, ClipboardList, Code2, Eye, Rocket, LayoutGrid, Settings } from "lucide-react";
+import { ClipboardList, Code2, Eye, Rocket, LayoutGrid, Settings, PanelsTopLeft } from "lucide-react";
 import { useUiStore, type AppMode } from "../store/ui";
 import { useNotificationsStore } from "../store/notifications";
 import { useWorkspaceStore } from "../store/workspace";
@@ -10,12 +10,12 @@ interface BarItem {
 }
 
 const ITEMS: BarItem[] = [
-  { mode: "activity", Icon: Bell, label: "Activity" },
+  { mode: "activity", Icon: LayoutGrid, label: "Activity" },
   { mode: "plan", Icon: ClipboardList, label: "Plan" },
   { mode: "develop", Icon: Code2, label: "Develop" },
   { mode: "monitor", Icon: Eye, label: "Monitor" },
   { mode: "launch", Icon: Rocket, label: "Launch" },
-  { mode: "custom", Icon: LayoutGrid, label: "Custom" },
+  { mode: "custom", Icon: PanelsTopLeft, label: "Custom" },
 ];
 
 export default function ActivityBar() {

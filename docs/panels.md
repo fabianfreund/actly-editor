@@ -34,6 +34,9 @@ That's it. The panel is now available in the layout. Users can drag it to any po
 - Use `.panel-header` for the top bar
 - Use `.panel-body` for the scrollable content area
 - Use CSS custom properties (`var(--bg-base)`, `var(--text-primary)`, etc.) for all colors — never hardcode
+- Match the existing app chrome: split views, thin borders, muted headers, and restrained emphasis
+- Avoid marketing-style treatments inside workspace screens: no decorative page heroes, large intro copy, or full-surface background gradients unless the screen is explicitly promotional
+- Prefer simple panel compositions over dashboard cards when the content is primarily operational
 
 ## Default layout
 
@@ -46,6 +49,8 @@ That's it. The panel is now available in the layout. Users can drag it to any po
 ```
 
 Live Preview and Settings are available as additional tabs (not in default layout).
+
+The Settings panel uses a full-content section switcher with navigation on the right, rather than a long single scrolling form.
 
 ## CSS design tokens
 

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import MenuBar from "../components/MenuBar";
 import ActivityBar from "./ActivityBar";
 import OnboardingModal from "../components/OnboardingModal";
+import FilePreviewModal from "../components/FilePreviewModal";
 import { useUiStore, type AppMode } from "../store/ui";
 import { useWorkspaceStore } from "../store/workspace";
 import { useActionsStore } from "../store/actions";
@@ -91,6 +92,8 @@ export default function AppShell() {
           onDone={() => setShowOnboarding(false)}
         />
       )}
+
+      <FilePreviewModal />
     </div>
   );
 }
