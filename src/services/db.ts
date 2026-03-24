@@ -47,7 +47,7 @@ export async function dbCreateTask(title: string, workspaceId: string, descripti
     "INSERT INTO tasks (id, title, description, status, workspace_id, created_at, updated_at) VALUES (?, ?, ?, 'planned', ?, ?, ?)",
     [id, title, description, workspaceId, now, now]
   );
-  return { id, title, description, status: "planned", assigned_agent_id: null, refs_json: "[]", created_at: now, updated_at: now };
+  return { id, title, description, status: "planned", assigned_agent_id: null, refs_json: "[]", workspace_id: workspaceId, created_at: now, updated_at: now };
 }
 
 export async function dbUpdateTask(
@@ -88,6 +88,7 @@ export async function dbListAttachments(taskId: string): Promise<TaskAttachment[
 
 export async function dbAddAttachment(
   taskId: string,
+  workspaceId: string,
   name: string,
   path: string,
   mime: string
@@ -96,10 +97,10 @@ export async function dbAddAttachment(
   const id = uuidv4();
   const now = new Date().toISOString();
   await db.execute(
-    "INSERT INTO task_attachments (id, task_id, name, path, mime, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-    [id, taskId, name, path, mime, now]
+    "INSERT INTO task_attachments (id, task_id, workspace_id, name, path, mime, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [id, taskId, workspaceId, name, path, mime, now]
   );
-  return { id, task_id: taskId, name, path, mime, created_at: now };
+  return { id, task_id: taskId, name, path, mime, workspace_id: workspaceId, created_at: now };
 }
 
 export async function dbDeleteAttachment(id: string): Promise<void> {
@@ -117,6 +118,7 @@ export async function dbGetTaskEvents(taskId: string): Promise<TaskEvent[]> {
 
 export async function dbAddTaskEvent(
   taskId: string,
+  workspaceId: string,
   type: string,
   content: string,
   actor = "user",
@@ -126,10 +128,10 @@ export async function dbAddTaskEvent(
   const id = uuidv4();
   const now = new Date().toISOString();
   await db.execute(
-    "INSERT INTO task_events (id, task_id, type, content, actor, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [id, taskId, type, content, actor, metadata, now]
+    "INSERT INTO task_events (id, task_id, workspace_id, type, content, actor, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [id, taskId, workspaceId, type, content, actor, metadata, now]
   );
-  return { id, task_id: taskId, type: type as TaskEvent["type"], content, actor, metadata, created_at: now };
+  return { id, task_id: taskId, workspace_id: workspaceId, type: type as TaskEvent["type"], content, actor, metadata, created_at: now };
 }
 
 export async function dbClearTaskEvents(taskId: string): Promise<void> {
@@ -249,16 +251,16 @@ export async function dbListSessions(taskId?: string): Promise<Session[]> {
   return db.select<Session[]>("SELECT * FROM sessions ORDER BY created_at DESC");
 }
 
-export async function dbCreateSession(taskId: string, agentId: string): Promise<Session> {
+export async function dbCreateSession(taskId: string, agentId: string, workspaceId: string): Promise<Session> {
   const db = await getDb();
   const id = uuidv4();
   const now = new Date().toISOString();
   await db.execute(
-    "INSERT INTO sessions (id, task_id, agent_id, status, created_at, updated_at) VALUES (?, ?, ?, 'idle', ?, ?)",
-    [id, taskId, agentId, now, now]
+    "INSERT INTO sessions (id, task_id, agent_id, workspace_id, status, created_at, updated_at) VALUES (?, ?, ?, 'idle', ?, ?, ?)",
+    [id, taskId, agentId, workspaceId, now, now]
   );
   return {
-    id, task_id: taskId, agent_id: agentId,
+    id, task_id: taskId, agent_id: agentId, workspace_id: workspaceId,
     codex_thread_id: null, worktree_path: null,
     status: "idle", created_at: now, updated_at: now,
   };

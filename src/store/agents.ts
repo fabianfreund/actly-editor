@@ -20,6 +20,7 @@ export interface Session {
   codex_thread_id: string | null;
   worktree_path: string | null;
   status: "idle" | "running" | "paused" | "completed" | "failed";
+  workspace_id: string | null;
   created_at: string;
   updated_at: string;
 }

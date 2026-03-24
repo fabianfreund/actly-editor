@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
-export type TaskStatus = "icebox" | "improving" | "planned" | "todo" | "in_progress" | "done" | "blocked" | "failed";
+// Note: 'todo' status is legacy - tasks should use 'planned' instead
+export type TaskStatus = "icebox" | "improving" | "planned" | "in_progress" | "done" | "blocked" | "failed";
 
 export interface Task {
   id: string;
@@ -9,6 +10,7 @@ export interface Task {
   status: TaskStatus;
   assigned_agent_id: string | null;
   refs_json: string; // JSON: Array<{ label: string; url: string }>
+  workspace_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +29,7 @@ export interface TaskEvent {
   content: string;
   actor: string;
   metadata: string | null;
+  workspace_id: string | null;
   created_at: string;
 }
 
@@ -36,6 +39,7 @@ export interface TaskAttachment {
   name: string;
   path: string;
   mime: string;
+  workspace_id: string | null;
   created_at: string;
 }
 

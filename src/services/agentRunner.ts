@@ -36,7 +36,8 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
   const runtimeModel = agent.model?.trim() || getAgentDefaultModel(agent) || "gpt-5.4-mini";
   const runtimeSystemPrompt = agent.system_prompt?.trim() || getAgentDefaultSystemPrompt(agent);
 
-  const session = await dbCreateSession(taskId, agentId);
+  const workspaceId = task.workspace_id ?? projectPath;
+  const session = await dbCreateSession(taskId, agentId, workspaceId);
   const { setSessions, sessions } = useAgentsStore.getState();
   setSessions([...sessions, session]);
   onSessionCreated?.(session);
@@ -61,7 +62,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
     await dbUpdateTask(taskIdToUpdate, updates).catch(() => null);
     useTasksStore.getState().upsertTask(currentTask);
     if (activityContent) {
-      const taskEvent = await dbAddTaskEvent(taskIdToUpdate, "state_change", activityContent, actor).catch(() => null);
+      const taskEvent = await dbAddTaskEvent(taskIdToUpdate, workspaceId, "state_change", activityContent, actor).catch(() => null);
       if (taskEvent) addTaskEvent(taskEvent);
     }
   };
@@ -78,7 +79,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
   let latestAgentMessage = "";
 
   const markTaskNeedsIntervention = async (reason: string) => {
-    const taskEvent = await dbAddTaskEvent(taskId, "agent_question", reason, agent.name).catch(() => null);
+    const taskEvent = await dbAddTaskEvent(taskId, workspaceId, "agent_question", reason, agent.name).catch(() => null);
     if (taskEvent) addTaskEvent(taskEvent);
     addNotification({
       kind: "task_state_change",
@@ -136,7 +137,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
       const item = event.item as { command?: string[] };
       const command = item.command?.join(" ");
       if (command) {
-        const taskEvent = await dbAddTaskEvent(taskId, "state_change", `Ran ${command}`, agent.name).catch(() => null);
+        const taskEvent = await dbAddTaskEvent(taskId, workspaceId, "state_change", `Ran ${command}`, agent.name).catch(() => null);
         if (taskEvent) addTaskEvent(taskEvent);
       }
     }
@@ -144,7 +145,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
     if (event.type === "item.file_change" && event.item) {
       const item = event.item as { path?: string };
       if (item.path) {
-        const taskEvent = await dbAddTaskEvent(taskId, "state_change", `Updated ${item.path}`, agent.name).catch(() => null);
+        const taskEvent = await dbAddTaskEvent(taskId, workspaceId, "state_change", `Updated ${item.path}`, agent.name).catch(() => null);
         if (taskEvent) addTaskEvent(taskEvent);
       }
     }
@@ -155,6 +156,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
       const summary = req.description?.trim() || "Approval required";
       const approvalEvent = await dbAddTaskEvent(
         taskId,
+        workspaceId,
         "approval",
         `Approval requested: ${summary}`,
         agent.name,
@@ -196,7 +198,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
         );
       }
       if (finalMessage) {
-        const taskEvent = await dbAddTaskEvent(taskId, "agent_message", finalMessage, agent.name).catch(() => null);
+        const taskEvent = await dbAddTaskEvent(taskId, workspaceId, "agent_message", finalMessage, agent.name).catch(() => null);
         if (taskEvent) addTaskEvent(taskEvent);
         addNotification({
           kind: "agent_message",
