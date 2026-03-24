@@ -1,6 +1,6 @@
 # Actly Editor
 
-Desktop AI coding workspace — Tauri v2 + React + TypeScript.
+Desktop AI coding workspace — Agentic coding with Tauri v2 + React + TypeScript.
 
 ## Docs
 - [Architecture](docs/architecture.md) — stack, data flow, module boundaries

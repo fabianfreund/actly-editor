@@ -68,6 +68,7 @@ pub fn run() {
             fs_helpers::fs_read_text,
             fs_helpers::fs_write_text,
             fs_helpers::fs_mkdir,
+            fs_helpers::fs_list_dir,
             fs_helpers::open_in_vscode,
         ])
         .run(tauri::generate_context!())

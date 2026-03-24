@@ -1,6 +1,6 @@
 # Architecture
 
-## Stack
+## Agentic Coding Platform
 
 | Layer | Technology |
 |---|---|
@@ -42,6 +42,12 @@ Everything else is TypeScript:
 - All SQL queries (`services/db.ts`)
 - Codex WebSocket communication (`services/codex.ts`)
 - Business logic in panels and stores
+
+## UI styling principles
+
+- Workspace screens should look like editor surfaces, not marketing pages.
+- Favor split panes, panel headers, token-based colors, and subtle borders over decorative gradients or oversized copy.
+- Reserve stronger visual treatments for true empty states, onboarding, or external landing pages.
 
 ## State model
 

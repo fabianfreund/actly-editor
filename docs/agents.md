@@ -1,6 +1,6 @@
 # Agents
 
-## Built-in agent types
+Actly is an **agentic coding platform** — it orchestrates AI agents to plan, build, and ship your software.
 
 | Name | Role | Default model | Purpose | Workflow |
 |---|---|---|---|---|
@@ -13,6 +13,7 @@ Actly normalizes legacy saved models to supported defaults:
 - Builder → `gpt-5.4`
 
 The Settings panel uses a dropdown of supported / already-used models instead of a free-text model field, which avoids unsupported values like `codex-1` for ChatGPT-account logins.
+Settings are grouped into section pages (`Codex`, `API Keys`, `Agents`) with a right-side section navigator.
 
 ## Agent configuration
 
@@ -28,7 +29,7 @@ Built-in agent types also carry a workflow config in `src/registries/agents.regi
 - **Task rewrite support** — whether the agent can update the task title / notes
 - **Execution prompt** — role-specific instructions appended to the Codex turn
 
-Configuration UI is in the Settings panel.
+Configuration UI is in the Settings panel under the `Agents` section.
 
 All three built-in agents are auto-seeded into SQLite at first launch via `dbListAgents()`. They do not require a manual migration step.
 

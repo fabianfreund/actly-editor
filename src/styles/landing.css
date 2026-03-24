@@ -1,0 +1,183 @@
+/* Landing Page Styles for GitHub Pages */
+body.landing {
+  background: linear-gradient(135deg, #0d0d1a 0%, #1a1a2e 50%, #16213e 100%);
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+body.landing .landing-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 60px 20px;
+  color: #e0e0e0;
+}
+
+body.landing .hero {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+body.landing .logo {
+  width: 120px;
+  height: 120px;
+  margin-bottom: 24px;
+}
+
+body.landing h1 {
+  font-size: 3.5rem;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #6366f1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+body.landing .tagline {
+  font-size: 1.5rem;
+  color: #94a3b8;
+  margin: 0 0 32px 0;
+}
+
+body.landing .description {
+  font-size: 1.125rem;
+  color: #cbd5e1;
+  line-height: 1.7;
+  max-width: 600px;
+  margin: 0 auto 40px auto;
+}
+
+body.landing .cta-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+body.landing .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 28px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+body.landing .btn-primary {
+  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+  color: white;
+  border: none;
+}
+
+body.landing .btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+}
+
+body.landing .btn-secondary {
+  background: transparent;
+  color: #e0e0e0;
+  border: 2px solid #475569;
+}
+
+body.landing .btn-secondary:hover {
+  border-color: #7c3aed;
+  color: #a855f7;
+}
+
+body.landing .features {
+  margin-top: 80px;
+}
+
+body.landing .features h2 {
+  font-size: 2rem;
+  text-align: center;
+  margin-bottom: 40px;
+  color: #f1f5f9;
+}
+
+body.landing .features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 24px;
+}
+
+body.landing .feature-card {
+  background: rgba(30, 30, 46, 0.8);
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 24px;
+  transition: transform 0.2s ease;
+}
+
+body.landing .feature-card:hover {
+  transform: translateY(-4px);
+  border-color: #7c3aed;
+}
+
+body.landing .feature-icon {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 16px;
+  color: #a855f7;
+}
+
+body.landing .feature-card h3 {
+  font-size: 1.25rem;
+  margin: 0 0 8px 0;
+  color: #f1f5f9;
+}
+
+body.landing .feature-card p {
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.6;
+}
+
+body.landing .tech-stack {
+  margin-top: 80px;
+  text-align: center;
+}
+
+body.landing .tech-stack h2 {
+  font-size: 1.5rem;
+  margin-bottom: 20px;
+  color: #f1f5f9;
+}
+
+body.landing .tech-tags {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+body.landing .tech-tag {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+body.landing footer {
+  margin-top: 80px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+body.landing footer a {
+  color: #a855f7;
+  text-decoration: none;
+}
+
+body.landing footer a:hover {
+  text-decoration: underline;
+}
