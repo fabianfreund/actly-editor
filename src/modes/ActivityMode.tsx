@@ -2,8 +2,11 @@ import { useEffect } from "react";
 import { Bell, CheckCircle, MessageSquare, GitPullRequest, XCircle } from "lucide-react";
 import { useNotificationsStore, type AppNotification } from "../store/notifications";
 import { useWorkspaceStore } from "../store/workspace";
+import { useTasksStore } from "../store/tasks";
+import { useAgentsStore } from "../store/agents";
 import { navigateMode } from "../services/layoutEvents";
 import { getCodexClient } from "../services/codex";
+import { dbUpdateTaskEventMetadata, dbUpdateSession } from "../services/db";
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -35,11 +38,35 @@ function NotificationCard({ n }: { n: AppNotification }) {
 
   const handleApprove = async (approved: boolean) => {
     if (!codexPort || !n.requestId) return;
+    const decision = approved ? "accept" : "decline";
     try {
       const client = await getCodexClient(codexPort);
-      client.respondToApproval(n.requestId, approved ? "accept" : "decline");
+      client.respondToApproval(n.requestId, decision);
     } catch (e) {
       console.error("Failed to respond to approval:", e);
+      return;
+    }
+    // Update the matching task event in DB + store
+    const { events, updateEvent } = useTasksStore.getState();
+    const taskEvents = events[n.taskId] ?? [];
+    const approvalEvent = taskEvents.find((e) => {
+      if (e.type !== "approval") return false;
+      try { return JSON.parse(e.metadata ?? "{}").request_id === n.requestId; } catch { return false; }
+    });
+    if (approvalEvent) {
+      const resolved = approved ? "accepted" : "declined";
+      const newMeta = JSON.stringify({ request_id: n.requestId, status: resolved, decision });
+      await dbUpdateTaskEventMetadata(approvalEvent.id, newMeta).catch(() => {});
+      updateEvent({ ...approvalEvent, metadata: newMeta });
+    }
+    // Resume the active session for this task
+    const { sessions, setSessions } = useAgentsStore.getState();
+    const activeSession = sessions
+      .filter((s) => s.task_id === n.taskId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+    if (activeSession) {
+      await dbUpdateSession(activeSession.id, { status: "running" }).catch(() => {});
+      setSessions(sessions.map((s) => s.id === activeSession.id ? { ...s, status: "running" } : s));
     }
   };
 
@@ -48,7 +75,9 @@ function NotificationCard({ n }: { n: AppNotification }) {
       style={{
         padding: "12px 16px",
         borderBottom: "1px solid var(--border-default)",
-        background: n.read ? "transparent" : "rgba(0,120,212,0.04)",
+        background: "transparent",
+        opacity: n.read ? 0.45 : 1,
+        transition: "opacity 0.2s",
         display: "flex",
         gap: 12,
         alignItems: "flex-start",
@@ -150,7 +179,7 @@ function NotificationCard({ n }: { n: AppNotification }) {
 }
 
 export default function ActivityMode() {
-  const { notifications, markAllRead } = useNotificationsStore();
+  const { notifications, markAllRead, dismissAll } = useNotificationsStore();
 
   useEffect(() => {
     markAllRead();
@@ -168,15 +197,18 @@ export default function ActivityMode() {
           flexShrink: 0,
         }}
       >
-        <span
-          style={{
-            fontSize: "var(--font-size-sm)",
-            fontWeight: 600,
-            color: "var(--text-secondary)",
-          }}
-        >
+        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--text-secondary)" }}>
           Activity
         </span>
+        {notifications.length > 0 && (
+          <button
+            className="btn btn-ghost"
+            onClick={dismissAll}
+            style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)" }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       <div style={{ flex: 1, overflow: "auto" }}>

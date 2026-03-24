@@ -6,8 +6,10 @@ import type { Agent } from "../store/agents";
 import type { TaskStatus } from "../store/tasks";
 
 export interface AgentWorkflow {
-  startStatus: TaskStatus;
-  completionStatus: TaskStatus;
+  /** Status to set when the agent starts. null = leave the task status unchanged. */
+  startStatus: TaskStatus | null;
+  /** Status to set when the agent finishes. null = leave the task status unchanged. */
+  completionStatus: TaskStatus | null;
   canRewriteTask: boolean;
   taskUpdateFormat?: "json_block";
   executionPrompt: string;
@@ -89,8 +91,8 @@ export const AGENT_TYPES: AgentTypeDef[] = [
       "You are a project initialization agent. Analyze repositories and write clear, practical documentation " +
       "and configuration for AI coding agents. Be concise, omit placeholders, and start immediately.",
     workflow: {
-      startStatus: "in_progress",
-      completionStatus: "done",
+      startStatus: null,
+      completionStatus: null,
       canRewriteTask: false,
       executionPrompt:
         "You are initializing an Actly project workspace. Analyze this repository carefully, then:\n\n" +

@@ -142,6 +142,11 @@ export async function dbAddTaskEvent(
   return { id, task_id: taskId, workspace_id: workspaceId, type: type as TaskEvent["type"], content, actor, metadata, created_at: now };
 }
 
+export async function dbUpdateTaskEventMetadata(eventId: string, metadata: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("UPDATE task_events SET metadata = ? WHERE id = ?", [metadata, eventId]);
+}
+
 export async function dbClearTaskEvents(taskId: string): Promise<void> {
   const db = await getDb();
   await db.execute("DELETE FROM task_events WHERE task_id = ?", [taskId]);

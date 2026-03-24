@@ -52,6 +52,7 @@ interface TasksState {
   removeTask: (taskId: string) => void;
   setEvents: (taskId: string, events: TaskEvent[]) => void;
   addEvent: (event: TaskEvent) => void;
+  updateEvent: (event: TaskEvent) => void;
   setAttachments: (taskId: string, attachments: TaskAttachment[]) => void;
   addAttachment: (attachment: TaskAttachment) => void;
   removeAttachment: (taskId: string, attachmentId: string) => void;
@@ -95,6 +96,16 @@ export const useTasksStore = create<TasksState>((set) => ({
     set((s) => {
       const existing = s.events[event.task_id] ?? [];
       return { events: { ...s.events, [event.task_id]: [...existing, event] } };
+    }),
+
+  updateEvent: (event) =>
+    set((s) => {
+      const existing = s.events[event.task_id] ?? [];
+      const idx = existing.findIndex((e) => e.id === event.id);
+      if (idx < 0) return s;
+      const next = [...existing];
+      next[idx] = event;
+      return { events: { ...s.events, [event.task_id]: next } };
     }),
 
   setAttachments: (taskId, attachments) =>

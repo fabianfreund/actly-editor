@@ -23,8 +23,8 @@ export interface StartAgentOptions {
   initialMessage?: string;
   /** Called with the new session immediately after creation */
   onSessionCreated?: (session: Session) => void;
-  /** Called when an approval_request arrives */
-  onApprovalRequest?: (req: ApprovalRequest) => void;
+  /** Called when an approval_request arrives. taskEventId is the DB event that can be updated on resolution. */
+  onApprovalRequest?: (req: ApprovalRequest, taskEventId: string | null) => void;
   /** Called when the agent's turn completes */
   onTurnCompleted?: () => void;
 }
@@ -67,12 +67,14 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
     }
   };
 
-  await applyTaskUpdate(
-    taskId,
-    { status: workflow.startStatus },
-    agent.name,
-    `Moved to ${workflow.startStatus.replace(/_/g, " ")}`
-  );
+  if (workflow.startStatus) {
+    await applyTaskUpdate(
+      taskId,
+      { status: workflow.startStatus },
+      agent.name,
+      `Moved to ${workflow.startStatus.replace(/_/g, " ")}`
+    );
+  }
 
   const client = await getCodexClient(port);
   let runHadError = false;
@@ -163,7 +165,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
         JSON.stringify({ request_id: req.request_id, status: "pending" })
       ).catch(() => null);
       if (approvalEvent) addTaskEvent(approvalEvent);
-      onApprovalRequest?.(req);
+      onApprovalRequest?.(req, approvalEvent?.id ?? null);
       addNotification({
         kind: "approval_request",
         taskId,
@@ -229,7 +231,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
         });
         latestAgentMessage = "";
       }
-      if (currentTask.status !== workflow.completionStatus) {
+      if (workflow.completionStatus && currentTask.status !== workflow.completionStatus) {
         await applyTaskUpdate(
           taskId,
           { status: workflow.completionStatus },
