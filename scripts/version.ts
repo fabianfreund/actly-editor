@@ -10,22 +10,24 @@ interface VersionData {
   major: number;
   minor: number;
   patch: number;
-  build: number;
 }
 
 function getVersionFile(): VersionData {
   if (existsSync(VERSION_FILE)) {
-    return JSON.parse(readFileSync(VERSION_FILE, 'utf-8'));
+    const raw = JSON.parse(readFileSync(VERSION_FILE, 'utf-8')) as VersionData & {
+      build?: number;
+    };
+    return {
+      major: raw.major ?? 0,
+      minor: raw.minor ?? 1,
+      patch: raw.patch ?? 1,
+    };
   }
-  return { major: 0, minor: 1, patch: 1, build: 1 };
+  return { major: 0, minor: 1, patch: 1 };
 }
 
 function saveVersionFile(data: VersionData): void {
   writeFileSync(VERSION_FILE, JSON.stringify(data, null, 2) + '\n');
-}
-
-function getFullVersion(data: VersionData): string {
-  return `${data.major}.${data.minor}.${data.patch}.${data.build}`;
 }
 
 function getSemver(data: VersionData): string {
@@ -40,19 +42,16 @@ function bumpVersion(part: string): void {
       data.major += 1;
       data.minor = 0;
       data.patch = 0;
-      data.build = 1;
       break;
     case 'minor':
       data.minor += 1;
       data.patch = 0;
-      data.build = 1;
       break;
     case 'patch':
       data.patch += 1;
-      data.build = 1;
       break;
     case 'build':
-      data.build += 1;
+      data.patch += 1;
       break;
     default:
       console.error(`Unknown version part: ${part}`);
@@ -61,16 +60,16 @@ function bumpVersion(part: string): void {
   }
   
   saveVersionFile(data);
-  console.log(`Bumped ${part} to ${getFullVersion(data)}`);
+  console.log(`Bumped ${part} to ${getSemver(data)}`);
   updateConfigs(data);
 }
 
 function incrementBuild(): void {
   const data = getVersionFile();
-  data.build += 1;
+  data.patch += 1;
   saveVersionFile(data);
   updateConfigs(data);
-  console.log(`Build incremented to ${getFullVersion(data)}`);
+  console.log(`Version incremented to ${getSemver(data)}`);
 }
 
 function updateConfigs(data: VersionData): void {
@@ -91,7 +90,7 @@ function updateConfigs(data: VersionData): void {
 
 function showVersion(): void {
   const data = getVersionFile();
-  console.log(getFullVersion(data));
+  console.log(getSemver(data));
 }
 
 // Parse command line arguments

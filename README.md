@@ -87,7 +87,7 @@ npm run tauri:build
 ## Building for Install
 
 ```bash
-# Build macOS app and DMG installer (auto-increments build number)
+# Build macOS app and DMG installer (auto-increments patch version)
 npm run build:macos
 ```
 
@@ -99,23 +99,23 @@ Install by opening the `.dmg` and dragging the app to Applications.
 
 ## Version Management
 
-The app uses semver (`major.minor.patch`) for published artifacts. A build counter is tracked internally in `version.json` and is incremented automatically on each macOS build.
+The app uses standard semver (`major.minor.patch`) everywhere. The `build:macos` command increments the patch version before creating a production build.
 
 ```bash
 # Show current version
 npm run version:show
 
-# Bump version (resets build to 1)
+# Bump version
 npm run version:bump -- major   # e.g., 0.1.2 -> 1.0.0
 npm run version:bump -- minor   # e.g., 0.1.2 -> 0.2.0
 npm run version:bump -- patch   # e.g., 0.1.2 -> 0.1.3
-npm run version:bump -- build   # increments internal build counter only
+npm run version:bump -- build   # alias for patch
 
-# Increment build counter only (used by build:macos automatically)
+# Increment patch version only (used by build:macos automatically)
 npm run version:increment
 ```
 
-The `build:macos` command automatically increments the build counter before building. `package.json` and `tauri.conf.json` always reflect the semver (`major.minor.patch`).
+The `build:macos` command automatically increments the patch version before building. `package.json`, `tauri.conf.json`, and `version.json` all stay aligned on the same semver value.
 
 On first launch, open a project folder. If the project does not have an `.actly/` folder yet, the app can scaffold and initialize it for you.
 
