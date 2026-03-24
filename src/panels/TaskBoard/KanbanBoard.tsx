@@ -3,7 +3,7 @@ import { useTasksStore, type TaskStatus } from "../../store/tasks";
 import { useAgentsStore } from "../../store/agents";
 import { useWorkspaceStore } from "../../store/workspace";
 import { dbListTasks, dbCreateTask, dbListAgents, dbListSessions } from "../../services/db";
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import KanbanColumn from "./KanbanColumn";
 import { getTaskRunState } from "../../components/TaskRunState";
 
@@ -32,11 +32,11 @@ export default function KanbanBoard() {
     dbListSessions().then(setSessions).catch(console.error);
   }, [projectPath, setTasks, setAgents, setSessions]);
 
-  const handleTaskClick = (taskId: string) => {
+  const handleTaskClick = useCallback((taskId: string) => {
     setActiveTaskId(taskId);
-  };
+  }, [setActiveTaskId]);
 
-  const handleAddTask = async (title: string, status: TaskStatus) => {
+  const handleAddTask = useCallback(async (title: string, status: TaskStatus) => {
     try {
       if (!projectPath) return;
       const task = await dbCreateTask(title, projectPath);
@@ -47,7 +47,7 @@ export default function KanbanBoard() {
     } catch (e) {
       console.error("Failed to create task:", e);
     }
-  };
+  }, [projectPath, upsertTask, setActiveTaskId]);
 
   return (
     <div
@@ -72,7 +72,7 @@ export default function KanbanBoard() {
           activeTaskId={activeTaskId}
           taskRunStates={taskRunStates}
           onTaskClick={handleTaskClick}
-          onAddTask={(title) => handleAddTask(title, status)}
+          onAddTask={handleAddTask}
         />
       ))}
     </div>
