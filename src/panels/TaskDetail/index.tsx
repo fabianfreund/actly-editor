@@ -39,17 +39,32 @@ function parseRefs(json: string): Ref[] {
   try { return JSON.parse(json) ?? []; } catch { return []; }
 }
 
+interface ActlyActivityMeta {
+  type: "activity" | "question" | "summary";
+  text: string;
+  items?: Array<{ label: string; detail?: string }>;
+}
+
+function parseActivityMeta(metadata: string | null): ActlyActivityMeta | null {
+  if (!metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata) as Record<string, unknown>;
+    if (parsed.type === "activity" || parsed.type === "question" || parsed.type === "summary") {
+      return parsed as ActlyActivityMeta;
+    }
+    return null;
+  } catch { return null; }
+}
+
 // ─── status options ───────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS = ["icebox", "improving", "planned", "in_progress", "done", "blocked"] as const;
+const STATUS_OPTIONS = ["icebox", "planned", "in_progress", "done"] as const;
 const STATUS_COLORS: Record<string, string> = {
   icebox: "var(--text-muted)",
-  improving: "var(--text-warning)",
   planned: "var(--text-muted)",
   todo: "var(--text-muted)",
   in_progress: "var(--accent)",
   done: "var(--status-done)",
-  blocked: "var(--status-blocked)",
   failed: "var(--text-error)",
 };
 
@@ -160,22 +175,13 @@ export default function TaskDetail() {
     return freshAgents;
   }, [agents, setAgents]);
 
-  const getFreshAgentById = useCallback(async (agentId: string) => {
-    const freshAgents = await getFreshAgents();
-    return freshAgents.find((candidate) => candidate.id === agentId)
-      ?? agents.find((candidate) => candidate.id === agentId)
-      ?? null;
-  }, [agents, getFreshAgents]);
-
   const runTaskWithAgent = useCallback(async (agent: NonNullable<typeof agents[number]>, initialMessage?: string) => {
     if (!task || !projectPath) return;
-    const freshAgent = await getFreshAgentById(agent.id);
-    if (!freshAgent) return;
     await startAgent({
       taskId: task.id,
-      agentId: freshAgent.id,
+      agentId: agent.id,
       task,
-      agent: freshAgent,
+      agent,
       projectPath,
       codexPath,
       initialMessage,
@@ -183,7 +189,7 @@ export default function TaskDetail() {
         setSessions([...useAgentsStore.getState().sessions, session]);
       },
     });
-  }, [codexPath, projectPath, task, setSessions, getFreshAgentById]);
+  }, [codexPath, projectPath, task, setSessions]);
 
   const handleAgentChange = async (agentId: string) => {
     await saveField({ assigned_agent_id: agentId || null });
@@ -282,24 +288,21 @@ export default function TaskDetail() {
 
   const handleRestartTask = async () => {
     if (!task || !projectPath) return;
-
-    const freshAgents = await getFreshAgents();
+    const currentAgents = useAgentsStore.getState().agents;
     const agent =
-      freshAgents.find((candidate) => candidate.id === task.assigned_agent_id) ??
-      freshAgents.find((candidate) => candidate.role === "builder") ??
-      freshAgents[0];
-
+      currentAgents.find((a) => a.id === task.assigned_agent_id) ??
+      currentAgents.find((a) => a.role === "builder") ??
+      currentAgents[0];
     if (!agent) return;
-
     await runTaskWithAgent(agent);
   };
 
   const handleStartAssignedAgent = async () => {
     if (!pendingAssignedAgentId) return;
-    const agent = await getFreshAgentById(pendingAssignedAgentId);
+    const agent = useAgentsStore.getState().agents.find((a) => a.id === pendingAssignedAgentId) ?? null;
     if (!agent) return;
-    await runTaskWithAgent(agent);
     setPendingAssignedAgentId(null);
+    await runTaskWithAgent(agent);
   };
 
   const insertMention = (agentId: string) => {
@@ -636,9 +639,17 @@ function TimelineEvent({ event, rootPath }: { event: TaskEvent; rootPath?: strin
     );
   }
 
+  const activityMeta = parseActivityMeta(event.metadata);
   const icon = EVENT_ICONS[event.type] ?? <Clock size={13} />;
   return (
-    <div style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border-default)" }}>
+    <div style={{
+      display: "flex", gap: 10, padding: "8px 0",
+      borderBottom: "1px solid var(--border-default)",
+      ...(activityMeta?.type === "question" && {
+        borderLeft: "2px solid var(--text-warning)",
+        paddingLeft: 8,
+      })
+    }}>
       <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-secondary)", marginTop: 2 }}>
         {icon}
       </div>
@@ -649,9 +660,21 @@ function TimelineEvent({ event, rootPath }: { event: TaskEvent; rootPath?: strin
             {new Date(event.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
-        <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--text-primary)", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-          <FormattedText text={event.content} rootPath={rootPath} />
-        </p>
+        <div style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--text-primary)", lineHeight: 1.5, wordBreak: "break-word" }}>
+          <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+            <FormattedText text={event.content} rootPath={rootPath} />
+          </p>
+          {activityMeta?.items && activityMeta.items.length > 0 && (
+            <ul style={{ margin: "6px 0 0 0", padding: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 3 }}>
+              {activityMeta.items.map((item, i) => (
+                <li key={i} style={{ fontSize: "var(--font-size-xs)", color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                  <span style={{ fontWeight: 600 }}>{item.label}</span>
+                  {item.detail && <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>{item.detail}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

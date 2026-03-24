@@ -29,6 +29,12 @@ pub fn run() {
             sql: include_str!("db/migrations/003_workspace_tasks.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "workspace indexes",
+            sql: include_str!("db/migrations/004_add_workspace_indexes.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -62,6 +68,7 @@ pub fn run() {
             fs_helpers::fs_read_text,
             fs_helpers::fs_write_text,
             fs_helpers::fs_mkdir,
+            fs_helpers::open_in_vscode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 /// Check whether a path exists on disk.
 #[tauri::command]
@@ -26,4 +27,14 @@ pub fn fs_write_text(path: String, content: String) -> Result<(), String> {
 #[tauri::command]
 pub fn fs_mkdir(path: String) -> Result<(), String> {
     fs::create_dir_all(&path).map_err(|e| e.to_string())
+}
+
+/// Open a path in VS Code using the macOS `open` command.
+#[tauri::command]
+pub fn open_in_vscode(path: String) -> Result<(), String> {
+    Command::new("/usr/bin/open")
+        .args(["-a", "Visual Studio Code", &path])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }

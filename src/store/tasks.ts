@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 // Note: 'todo' status is legacy - tasks should use 'planned' instead
-export type TaskStatus = "icebox" | "improving" | "planned" | "in_progress" | "done" | "blocked" | "failed";
+export type TaskStatus = "icebox" | "planned" | "in_progress" | "done" | "failed";
 
 export interface Task {
   id: string;

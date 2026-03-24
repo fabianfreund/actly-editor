@@ -60,3 +60,13 @@ sessions                      codexPort
                               sessions[]
                               events{}
 ```
+
+### Task status values
+
+Valid statuses: `icebox`, `planned`, `in_progress`, `done`.
+
+The statuses `improving` and `blocked` have been removed. `normalizeStatus()` in `src/services/db.ts` maps any legacy DB value to `"icebox"` so old rows are handled transparently.
+
+### Migrations
+
+SQLite migrations live in `src-tauri/src/db/migrations/` and must be registered in `lib.rs` in order. Migration `004_add_workspace_indexes.sql` adds `workspace_id` to `task_events`, `sessions`, and `task_attachments`. It must be present or comment posting and agent session creation will silently fail.

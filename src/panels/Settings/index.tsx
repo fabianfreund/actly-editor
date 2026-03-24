@@ -217,7 +217,7 @@ function AgentEditor({
         <span style={{ fontWeight: 600, fontSize: "var(--font-size-sm)", color: "var(--text-primary)" }}>
           {agent.name}
         </span>
-        <span className={`badge badge-${agent.role === "builder" ? "in_progress" : "todo"}`}>
+        <span className={`badge badge-${agent.role === "builder" ? "in_progress" : agent.role === "initializer" ? "icebox" : "todo"}`}>
           {agent.role}
         </span>
       </div>

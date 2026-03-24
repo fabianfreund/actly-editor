@@ -14,6 +14,7 @@ Follow progress and build updates on X: [@FabianXR_Builds](https://x.com/FabianX
 ![Actly Editor screenshot](docs/images/header_image.jpg)
 
 ![Status: MVP](https://img.shields.io/badge/status-MVP-blue)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fabianfreund/actly-editor?utm_source=oss&utm_medium=github&utm_campaign=fabianfreund%2Factly-editor&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 ## What It Does
 
@@ -92,29 +93,29 @@ npm run build:macos
 
 Output:
 - `.app` bundle: `src-tauri/target/release/bundle/macos/Actly Editor.app`
-- `.dmg` installer: `src-tauri/target/release/bundle/dmg/Actly Editor_0.1.1.1_aarch64.dmg`
+- `.dmg` installer: `src-tauri/target/release/bundle/dmg/Actly Editor_0.1.2_aarch64.dmg`
 
 Install by opening the `.dmg` and dragging the app to Applications.
 
 ## Version Management
 
-The app uses semantic versioning with a build number: `major.minor.patch.build`
+The app uses semver (`major.minor.patch`) for published artifacts. A build counter is tracked internally in `version.json` and is incremented automatically on each macOS build.
 
 ```bash
 # Show current version
 npm run version:show
 
 # Bump version (resets build to 1)
-npm run version:bump -- major   # e.g., 0.1.1.1 -> 1.0.0.1
-npm run version:bump -- minor   # e.g., 0.1.1.1 -> 0.2.0.1
-npm run version:bump -- patch   # e.g., 0.1.1.1 -> 0.1.2.1
-npm run version:bump -- build   # e.g., 0.1.1.1 -> 0.1.1.2
+npm run version:bump -- major   # e.g., 0.1.2 -> 1.0.0
+npm run version:bump -- minor   # e.g., 0.1.2 -> 0.2.0
+npm run version:bump -- patch   # e.g., 0.1.2 -> 0.1.3
+npm run version:bump -- build   # increments internal build counter only
 
-# Increment build number only
+# Increment build counter only (used by build:macos automatically)
 npm run version:increment
 ```
 
-The `build:macos` command automatically increments the build number before building.
+The `build:macos` command automatically increments the build counter before building. `package.json` and `tauri.conf.json` always reflect the semver (`major.minor.patch`).
 
 On first launch, open a project folder. If the project does not have an `.actly/` folder yet, the app can scaffold and initialize it for you.
 

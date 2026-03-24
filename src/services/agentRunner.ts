@@ -181,7 +181,9 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
         return;
       }
       const parsedTaskUpdate = workflow.canRewriteTask ? extractTaskUpdate(latestAgentMessage) : null;
-      const finalMessage = (parsedTaskUpdate?.cleanMessage ?? latestAgentMessage).trim();
+      const afterTaskUpdate = (parsedTaskUpdate?.cleanMessage ?? latestAgentMessage).trim();
+      const { cleanMessage: strippedMessage, activities } = extractActlyActivities(afterTaskUpdate);
+      const finalMessage = strippedMessage;
       if (parsedTaskUpdate && (parsedTaskUpdate.title || parsedTaskUpdate.description)) {
         await applyTaskUpdate(
           taskId,
@@ -196,6 +198,24 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
             ? "Updated the task title"
             : "Updated the task notes"
         );
+      }
+      for (const activity of activities) {
+        const isUserFacing = activity.type === "question" || activity.tag_user === true;
+        const eventType = isUserFacing ? "agent_question" : "agent_message";
+        const activityEvent = await dbAddTaskEvent(
+          taskId, workspaceId, eventType, activity.text, agent.name,
+          JSON.stringify({ type: activity.type, text: activity.text, items: activity.items ?? [] })
+        ).catch(() => null);
+        if (activityEvent) addTaskEvent(activityEvent);
+        if (isUserFacing) {
+          addNotification({
+            kind: "task_state_change",
+            taskId,
+            taskTitle: task.title,
+            agentName: agent.name,
+            content: activity.text,
+          });
+        }
       }
       if (finalMessage) {
         const taskEvent = await dbAddTaskEvent(taskId, workspaceId, "agent_message", finalMessage, agent.name).catch(() => null);
@@ -302,6 +322,46 @@ export async function stopTaskSessions(taskId: string): Promise<void> {
   if (workspaceStore.activeTaskId === taskId) {
     workspaceStore.setCodexPort(null);
   }
+}
+
+interface ActlyActivity {
+  type: "activity" | "question" | "summary";
+  text: string;
+  items?: Array<{ label: string; detail?: string }>;
+  tag_user?: boolean;
+}
+
+function extractActlyActivities(message: string): { cleanMessage: string; activities: ActlyActivity[] } {
+  const regex = /<actly_activity>\s*([\s\S]*?)\s*<\/actly_activity>/gi;
+  const matches: Array<{ full: string; json: string }> = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(message)) !== null) {
+    matches.push({ full: match[0], json: match[1] });
+  }
+
+  const activities: ActlyActivity[] = [];
+  let cleanMessage = message;
+  for (const { full, json } of matches) {
+    cleanMessage = cleanMessage.replace(full, "");
+    try {
+      const parsed = JSON.parse(json) as Record<string, unknown>;
+      const type = parsed.type === "question" || parsed.type === "summary" ? parsed.type : "activity";
+      const text = typeof parsed.text === "string" && parsed.text.trim() ? parsed.text.trim() : null;
+      if (!text) continue;
+      const activity: ActlyActivity = { type, text };
+      if (Array.isArray(parsed.items)) {
+        activity.items = (parsed.items as unknown[]).filter(
+          (item): item is { label: string; detail?: string } =>
+            typeof (item as Record<string, unknown>).label === "string"
+        );
+      }
+      if (parsed.tag_user === true) activity.tag_user = true;
+      activities.push(activity);
+    } catch { /* skip malformed blocks */ }
+  }
+
+  return { cleanMessage: cleanMessage.trim(), activities };
 }
 
 function extractTaskUpdate(message: string): { cleanMessage: string; title?: string; description?: string } | null {

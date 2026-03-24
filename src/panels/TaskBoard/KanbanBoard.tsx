@@ -9,11 +9,9 @@ import { getTaskRunState } from "../../components/TaskRunState";
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: "icebox", label: "Icebox" },
-  { status: "improving", label: "Improving" },
   { status: "planned", label: "Planned" },
   { status: "in_progress", label: "In Progress" },
   { status: "done", label: "Done" },
-  { status: "blocked", label: "Blocked" },
 ];
 
 export default function KanbanBoard() {
