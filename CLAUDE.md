@@ -1,12 +1,14 @@
 # Actly Editor
 
-Desktop AI coding workspace — Tauri v2 + React + TypeScript.
+Desktop AI coding workspace — Agentic coding with Tauri v2 + React + TypeScript.
 
 ## Docs
 - [Architecture](docs/architecture.md) — stack, data flow, module boundaries
 - [Panels](docs/panels.md) — panel system, adding new panels
-- [Agents](docs/agents.md) — agent types, registries, adding agents
+- [Agents](docs/agents.md) — agent types, registries, adding agents, activity message protocol
+- [Tasks](docs/tasks.md) — task status lifecycle, task templates registry, `dbCreateTask`
 - [Codex Integration](docs/codex-integration.md) — app-server protocol, JSONL events, approval flow
+- [Documentation](docs/documentation.md) — docstring standards, generating API docs
 
 ## Quick start
 
@@ -30,6 +32,7 @@ npm run tauri:build
 |---|---|
 | Add a panel | `src/layout/panels.registry.ts` |
 | Add an agent type | `src/registries/agents.registry.ts` |
+| Add a task template | `src/registries/tasks.registry.ts` |
 | Add an action button | `src/registries/actions.registry.ts` |
 | Tauri commands (Rust) | `src-tauri/src/commands/` |
 | SQLite schema | `src-tauri/src/db/migrations/001_initial.sql` |

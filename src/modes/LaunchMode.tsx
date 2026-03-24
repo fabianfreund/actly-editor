@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import InDevelopmentBanner from "../components/InDevelopmentBanner";
 
 const ActionPanel = lazy(() => import("../panels/ActionPanel/index"));
 const Terminal = lazy(() => import("../panels/Terminal/index"));
@@ -21,6 +22,7 @@ const FALLBACK = (
 export default function LaunchMode() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <InDevelopmentBanner label="Launch is still in development and not fully implemented yet." />
       <div
         style={{
           flexShrink: 0,

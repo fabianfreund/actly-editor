@@ -8,30 +8,9 @@ import { useWorkspaceStore } from "../store/workspace";
 import { startAgent } from "../services/agentRunner";
 import { dbCreateTask, dbUpdateTask, dbListAgents } from "../services/db";
 import { navigateMode } from "../services/layoutEvents";
+import { getTaskTemplate } from "../registries/tasks.registry";
 
 type Step = "welcome" | "ai-init";
-
-const ONBOARDING_PROMPT = `\
-You are initializing an Actly project workspace. Analyze this repository carefully, then:
-
-1. Overwrite \`.actly/AGENTS.md\` with a complete version containing:
-   - A 2–3 paragraph project overview (what it does, tech stack, purpose)
-   - Key files and directories with short descriptions
-   - Practical coding guidelines for AI agents (conventions, patterns, gotchas)
-   - A references table linking to docs files
-
-2. Overwrite \`.actly/docs/architecture.md\` with:
-   - Tech stack and major dependencies
-   - High-level data flow or request lifecycle
-   - Key architectural decisions and why they were made
-
-3. Read \`package.json\` (or Makefile) and write \`.actly/actions.json\` as a JSON array:
-   [{"id":"dev","label":"Dev Server","command":"npm","args":["run","dev"]}, ...]
-   Include all useful scripts (dev, build, test, lint, typecheck, preview, etc).
-   Output only the JSON array in this file — no markdown.
-
-Be concise and practical. Do not add placeholders — if you cannot determine something, omit it.
-Start working immediately without asking questions.`;
 
 interface Props {
   projectPath: string;
@@ -62,11 +41,17 @@ export default function OnboardingModal({ projectPath, onDone }: Props) {
     try {
       // Load agents — needs at least one configured
       const agents = await dbListAgents();
-      const agent = agents.find((a) => a.role === "builder") ?? agents[0];
+      const agent = agents.find((a) => a.id === "agent-initializer") ?? agents.find((a) => a.role === "builder") ?? agents[0];
       if (!agent) throw new Error("No agents configured. Go to Settings to add one first.");
 
-      // Create "Initialize project" task in planned, then immediately in_progress
-      const task = await dbCreateTask("Initialize project", projectPath, ONBOARDING_PROMPT);
+      // Create task from template
+      const template = getTaskTemplate("initialize-project");
+      const task = await dbCreateTask(
+        template?.title ?? "Initialize project",
+        projectPath,
+        template?.description ?? "",
+        template?.assigned_agent_id ?? agent.id
+      );
 
       // Add to store so kanban shows it right away
       useTasksStore.getState().upsertTask({ ...task, status: "in_progress" });
@@ -80,7 +65,7 @@ export default function OnboardingModal({ projectPath, onDone }: Props) {
       await startAgent({
         taskId: task.id,
         agentId: agent.id,
-        task: { ...task, description: ONBOARDING_PROMPT },
+        task,
         agent,
         projectPath,
         codexPath,

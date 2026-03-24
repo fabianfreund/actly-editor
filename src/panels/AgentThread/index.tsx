@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, CheckCircle, XCircle } from "lucide-react";
+import { Play } from "lucide-react";
+import { ApprovalCard, type ApprovalState } from "../../components/ApprovalCard";
 import { useWorkspaceStore } from "../../store/workspace";
 import { useTasksStore } from "../../store/tasks";
 import { useAgentsStore } from "../../store/agents";
-import { dbAddTaskEvent, dbListAgents, dbListSessions, dbUpdateSession } from "../../services/db";
+import { dbListAgents, dbListSessions, dbUpdateSession, dbUpdateTaskEventMetadata } from "../../services/db";
 import { getCodexClient, type ApprovalDecision, type ApprovalRequest } from "../../services/codex";
 import { startAgent } from "../../services/agentRunner";
 import { TaskRunStateBadge, getTaskRunState } from "../../components/TaskRunState";
@@ -11,11 +12,12 @@ import { FormattedText } from "../../components/FormattedText";
 
 export default function AgentThread() {
   const { activeTaskId, projectPath, codexPort, codexPath } = useWorkspaceStore();
-  const { tasks, addEvent: addTaskEvent } = useTasksStore();
+  const { tasks, updateEvent } = useTasksStore();
   const { agents, sessions, events, setAgents, setSessions } = useAgentsStore();
   const [message, setMessage] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState<string>("agent-builder");
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
+  const [pendingApprovalEventId, setPendingApprovalEventId] = useState<string | null>(null);
   const eventsEndRef = useRef<HTMLDivElement>(null);
 
   const task = tasks.find((t) => t.id === activeTaskId);
@@ -58,8 +60,9 @@ export default function AgentThread() {
         onSessionCreated: (session) => {
           setSessions([...sessions, session]);
         },
-        onApprovalRequest: (req) => {
+        onApprovalRequest: (req, taskEventId) => {
           setPendingApproval(req);
+          setPendingApprovalEventId(taskEventId);
         },
       });
     } catch (e) {
@@ -86,38 +89,35 @@ export default function AgentThread() {
   const handleApprovalDecision = async (requestId: string, decision: ApprovalDecision) => {
     if (!codexPort || !activeSession || !activeTaskId) return;
     const client = await getCodexClient(codexPort);
+    client.respondToApproval(requestId, decision);
     await dbUpdateSession(activeSession.id, { status: "running" });
     setSessions(
       sessions.map((session) =>
         session.id === activeSession.id ? { ...session, status: "running" } : session
       )
     );
-    client.respondToApproval(requestId, decision);
     useAgentsStore.getState().addEvent(activeSession.id, {
       id: `${Date.now()}-${Math.random()}`,
       session_id: activeSession.id,
       type: "approval_resolved",
-      payload: {
-        request_id: requestId,
-        decision,
-      },
+      payload: { request_id: requestId, decision },
       received_at: new Date().toISOString(),
     });
-    const actionLabel =
-      decision === "accept"
-        ? "Approved request"
-        : decision === "acceptForSession"
-        ? "Always approved this request"
-        : "Dismissed request";
-    const taskEvent = await dbAddTaskEvent(
-      activeTaskId,
-      "approval",
-      actionLabel,
-      selectedAgent?.name ?? "agent",
-      JSON.stringify({ request_id: requestId, decision })
-    ).catch(() => null);
-    if (taskEvent) addTaskEvent(taskEvent);
-    if (pendingApproval?.request_id === requestId) setPendingApproval(null);
+    // Update the existing pending approval task event instead of creating a second one
+    if (pendingApprovalEventId) {
+      const resolved: ApprovalState =
+        decision === "accept" ? "accepted" :
+        decision === "acceptForSession" ? "alwaysApproved" : "declined";
+      const metadata = JSON.stringify({ request_id: requestId, status: resolved, decision });
+      await dbUpdateTaskEventMetadata(pendingApprovalEventId, metadata).catch(() => {});
+      const { events } = useTasksStore.getState();
+      const existing = (events[activeTaskId] ?? []).find((e) => e.id === pendingApprovalEventId);
+      if (existing) updateEvent({ ...existing, metadata });
+    }
+    if (pendingApproval?.request_id === requestId) {
+      setPendingApproval(null);
+      setPendingApprovalEventId(null);
+    }
   };
 
   if (!activeTaskId || !task) {
@@ -399,128 +399,21 @@ function EventBubble({
   const content = event.kind === "agent" ? event.content.trim() : event.content;
 
   if (isApproval && event.request && onApprovalDecision) {
-    const approvalMeta = getApprovalMeta(event.request);
     const approvalState = event.approvalState ?? "pending";
-    const isResolved = approvalState !== "pending";
-    const primaryLabel =
-      approvalState === "approved"
-        ? "Approved"
-        : approvalState === "alwaysApproved"
-        ? "Always Approved"
-        : approvalState === "dismissed"
-        ? "Dismissed"
-        : "Approve";
-    const dismissLabel = approvalState === "dismissed" ? "Denied" : "Dismiss";
-    const alwaysApproveLabel = approvalState === "alwaysApproved" ? "Always Approved" : "Always Approve";
-
+    const stateMap: Record<string, ApprovalState> = {
+      pending: "pending", approved: "accepted", alwaysApproved: "alwaysApproved", dismissed: "declined",
+    };
     return (
-      <div
-        style={{
-          padding: "14px 16px",
-          borderRadius: 12,
-          background: "linear-gradient(180deg, rgba(204,167,0,0.08), rgba(204,167,0,0.04))",
-          border: "1px solid rgba(204,167,0,0.3)",
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-          maxWidth: 760,
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-        }}
-      >
-        <div style={{ fontSize: "var(--font-size-xs)", fontWeight: 700, color: "var(--text-warning)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          Approval Required
-        </div>
-        <div style={{ fontSize: "var(--font-size-sm)", color: "var(--text-primary)", whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.55 }}>
-          <FormattedText text={content} rootPath={rootPath} />
-        </div>
-        {approvalMeta.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              padding: "10px 12px",
-              borderRadius: 8,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
-            {approvalMeta.map((entry) => (
-              <div key={entry.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    lineHeight: 1.4,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    color: "var(--text-muted)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {entry.label}
-                </div>
-                <div
-                  style={{
-                    fontSize: "var(--font-size-xs)",
-                    lineHeight: 1.5,
-                    color: "var(--text-secondary)",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <FormattedText text={entry.value} rootPath={rootPath} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {event.request.command && (
-          <code
-            style={{
-              display: "block",
-              background: "var(--bg-base)",
-              padding: "10px 12px",
-              borderRadius: 8,
-              fontSize: "var(--font-size-xs)",
-              fontFamily: "var(--font-mono)",
-              color: "var(--text-primary)",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              border: "1px solid var(--border-default)",
-            }}
-          >
-            <FormattedText text={event.request.command.join(" ")} rootPath={rootPath} />
-          </code>
-        )}
-        {event.request.file_paths && event.request.file_paths.length > 0 && (
-          <div
-            style={{
-              fontSize: "var(--font-size-xs)",
-              color: "var(--text-secondary)",
-              background: "rgba(255,255,255,0.02)",
-              border: "1px solid var(--border-default)",
-              borderRadius: 8,
-              padding: "10px 12px",
-              lineHeight: 1.5,
-            }}
-          >
-            <FormattedText text={event.request.file_paths.join("\n")} rootPath={rootPath} />
-          </div>
-        )}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn btn-primary" disabled={isResolved} onClick={() => onApprovalDecision(event.request!.request_id, "accept")}>
-            <CheckCircle size={12} />
-            {primaryLabel}
-          </button>
-          <button className="btn btn-ghost" disabled={isResolved} onClick={() => onApprovalDecision(event.request!.request_id, "decline")}>
-            <XCircle size={12} />
-            {dismissLabel}
-          </button>
-          <button className="btn btn-ghost" disabled={isResolved} onClick={() => onApprovalDecision(event.request!.request_id, "acceptForSession")}>
-            <CheckCircle size={12} />
-            {alwaysApproveLabel}
-          </button>
-        </div>
-      </div>
+      <ApprovalCard
+        description={content}
+        command={event.request.command}
+        file_paths={event.request.file_paths}
+        meta={getApprovalMeta(event.request)}
+        state={stateMap[approvalState] ?? "pending"}
+        requestId={event.request.request_id}
+        rootPath={rootPath}
+        onDecision={onApprovalDecision}
+      />
     );
   }
 

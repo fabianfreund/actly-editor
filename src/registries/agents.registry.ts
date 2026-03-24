@@ -6,8 +6,10 @@ import type { Agent } from "../store/agents";
 import type { TaskStatus } from "../store/tasks";
 
 export interface AgentWorkflow {
-  startStatus: TaskStatus;
-  completionStatus: TaskStatus;
+  /** Status to set when the agent starts. null = leave the task status unchanged. */
+  startStatus: TaskStatus | null;
+  /** Status to set when the agent finishes. null = leave the task status unchanged. */
+  completionStatus: TaskStatus | null;
   canRewriteTask: boolean;
   taskUpdateFormat?: "json_block";
   executionPrompt: string;
@@ -16,7 +18,7 @@ export interface AgentWorkflow {
 export interface AgentTypeDef {
   id: string;
   name: string;
-  role: "planner" | "builder";
+  role: "planner" | "builder" | "initializer";
   defaultModel: string;
   defaultProvider: string;
   defaultApprovalMode: "auto" | "full" | "readonly" | "never";
@@ -38,7 +40,7 @@ export const AGENT_TYPES: AgentTypeDef[] = [
       "clear scope, and practical acceptance criteria. You may improve the task itself but you should not " +
       "implement the code changes in this mode.",
     workflow: {
-      startStatus: "improving",
+      startStatus: "icebox",
       completionStatus: "planned",
       canRewriteTask: true,
       taskUpdateFormat: "json_block",
@@ -46,7 +48,12 @@ export const AGENT_TYPES: AgentTypeDef[] = [
         "You are improving a task before implementation. Read the repository, inspect relevant files, and rewrite " +
         "the task with concrete codebase context. You may update both the task title and notes. At the end of your " +
         "reply, include exactly one <task_update>{...}</task_update> JSON block with this shape: " +
-        "{\"title\":\"updated title\",\"description\":\"updated notes\"}. Keep the JSON valid and omit fields you do not want to change.",
+        "{\"title\":\"updated title\",\"description\":\"updated notes\"}. Keep the JSON valid and omit fields you do not want to change. " +
+        "Throughout your work, you may emit one or more <actly_activity>{...}</actly_activity> JSON blocks " +
+        "to report progress, ask the user a question, or summarise findings. Each block must match this shape: " +
+        "{\"type\":\"activity\"|\"question\"|\"summary\",\"text\":\"main message\"," +
+        "\"items\":[{\"label\":\"string\",\"detail\":\"optional string\"}],\"tag_user\":false}. " +
+        "Omit \"items\" when you have no list to share. Set \"tag_user\":true only if the user must respond before you can continue.",
     },
   },
   {
@@ -65,7 +72,45 @@ export const AGENT_TYPES: AgentTypeDef[] = [
       canRewriteTask: false,
       executionPrompt:
         "You are implementing the task. Use the current task title and notes as the source of truth, make the requested changes, " +
-        "and finish by summarizing what changed and any verification you ran.",
+        "and finish by summarizing what changed and any verification you ran. " +
+        "Throughout your work, you may emit one or more <actly_activity>{...}</actly_activity> JSON blocks " +
+        "to report progress, ask the user a question, or summarise findings. Each block must match this shape: " +
+        "{\"type\":\"activity\"|\"question\"|\"summary\",\"text\":\"main message\"," +
+        "\"items\":[{\"label\":\"string\",\"detail\":\"optional string\"}],\"tag_user\":false}. " +
+        "Omit \"items\" when you have no list to share. Set \"tag_user\":true only if the user must respond before you can continue.",
+    },
+  },
+  {
+    id: "agent-initializer",
+    name: "Izzy the Initializer",
+    role: "initializer",
+    defaultModel: "gpt-5.4",
+    defaultProvider: "openai",
+    defaultApprovalMode: "auto",
+    defaultSystemPrompt:
+      "You are a project initialization agent. Analyze repositories and write clear, practical documentation " +
+      "and configuration for AI coding agents. Be concise, omit placeholders, and start immediately.",
+    workflow: {
+      startStatus: null,
+      completionStatus: null,
+      canRewriteTask: false,
+      executionPrompt:
+        "You are initializing an Actly project workspace. Analyze this repository carefully, then:\n\n" +
+        "1. Overwrite `.actly/AGENTS.md` with a complete version containing:\n" +
+        "   - A 2–3 paragraph project overview (what it does, tech stack, purpose)\n" +
+        "   - Key files and directories with short descriptions\n" +
+        "   - Practical coding guidelines for AI agents (conventions, patterns, gotchas)\n" +
+        "   - A references table linking to docs files\n\n" +
+        "2. Overwrite `.actly/docs/architecture.md` with:\n" +
+        "   - Tech stack and major dependencies\n" +
+        "   - High-level data flow or request lifecycle\n" +
+        "   - Key architectural decisions and why they were made\n\n" +
+        "3. Read `package.json` (or Makefile) and write `.actly/actions.json` as a JSON array:\n" +
+        "   [{\"id\":\"dev\",\"label\":\"Dev Server\",\"command\":\"npm\",\"args\":[\"run\",\"dev\"]}, ...]\n" +
+        "   Include all useful scripts (dev, build, test, lint, typecheck, preview, etc).\n" +
+        "   Output only the JSON array in this file — no markdown.\n\n" +
+        "Be concise and practical. Do not add placeholders — if you cannot determine something, omit it. " +
+        "Start working immediately without asking questions.",
     },
   },
 ];

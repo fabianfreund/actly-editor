@@ -1,6 +1,6 @@
 # Architecture
 
-## Stack
+## Agentic Coding Platform
 
 | Layer | Technology |
 |---|---|
@@ -43,6 +43,12 @@ Everything else is TypeScript:
 - Codex WebSocket communication (`services/codex.ts`)
 - Business logic in panels and stores
 
+## UI styling principles
+
+- Workspace screens should look like editor surfaces, not marketing pages.
+- Favor split panes, panel headers, token-based colors, and subtle borders over decorative gradients or oversized copy.
+- Reserve stronger visual treatments for true empty states, onboarding, or external landing pages.
+
 ## State model
 
 ```
@@ -60,3 +66,13 @@ sessions                      codexPort
                               sessions[]
                               events{}
 ```
+
+### Task status values
+
+Valid statuses: `icebox`, `planned`, `in_progress`, `done`.
+
+The statuses `improving` and `blocked` have been removed. `normalizeStatus()` in `src/services/db.ts` maps any legacy DB value to `"icebox"` so old rows are handled transparently.
+
+### Migrations
+
+SQLite migrations live in `src-tauri/src/db/migrations/` and must be registered in `lib.rs` in order. Migration `004_add_workspace_indexes.sql` adds `workspace_id` to `task_events`, `sessions`, and `task_attachments`. It must be present or comment posting and agent session creation will silently fail.

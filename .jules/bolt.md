@@ -1,0 +1,3 @@
+## 2026-03-23 - Prevented Unnecessary Re-Renders in TaskBoard List Items
+**Learning:** React list rendering in the Kanban Board can get expensive when local state inputs (like "New Task Title" input fields) trigger re-renders on every keystroke. Using inline arrow functions for callbacks (like \`onClick={() => onClick(task.id)}\`) on list items causes them to fail shallow equality checks in `React.memo()`.
+**Action:** Stabilized callback functions in list parent components using \`useCallback\`, updated child components to accept raw identifiers instead of wrapper functions for events, and wrapped the child list item components in \`React.memo()\` to effectively decouple them from the parent's generic state updates.

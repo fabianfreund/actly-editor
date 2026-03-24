@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { Task } from "../../store/tasks";
 import type { Agent } from "../../store/agents";
 import { TaskRunStateDot, type TaskRunState } from "../../components/TaskRunState";
@@ -7,17 +8,19 @@ interface KanbanCardProps {
   agents: Agent[];
   isActive: boolean;
   runState: TaskRunState;
-  onClick: () => void;
+  onClick: (taskId: string) => void;
 }
 
-export default function KanbanCard({ task, agents, isActive, runState, onClick }: KanbanCardProps) {
+// ⚡ Bolt Optimization: Memoize KanbanCard so it only re-renders when its specific
+// task data, assigned agent, or active state changes.
+export default memo(function KanbanCard({ task, agents, isActive, runState, onClick }: KanbanCardProps) {
   const agent = agents.find((a) => a.id === task.assigned_agent_id);
 
   return (
     <div
       onClick={(e) => {
         e.stopPropagation();
-        onClick();
+        onClick(task.id);
       }}
       style={{
         background: isActive ? "var(--bg-active)" : "var(--bg-elevated)",
@@ -41,7 +44,7 @@ export default function KanbanCard({ task, agents, isActive, runState, onClick }
               color: "var(--text-primary)",
               lineHeight: 1.4,
               wordBreak: "break-word",
-              marginBottom: agent || task.status === "blocked" ? 5 : 0,
+              marginBottom: agent ? 5 : 0,
             }}
           >
             {task.title}
@@ -61,22 +64,9 @@ export default function KanbanCard({ task, agents, isActive, runState, onClick }
                 {agent.name}
               </span>
             )}
-            {task.status === "blocked" && runState !== "needs_intervention" && (
-              <span
-                style={{
-                  fontSize: "var(--font-size-xs)",
-                  color: "var(--status-blocked)",
-                  background: "rgba(244,135,113,0.1)",
-                  padding: "1px 6px",
-                  borderRadius: 3,
-                }}
-              >
-                blocked
-              </span>
-            )}
           </div>
         </div>
       </div>
     </div>
   );
-}
+});

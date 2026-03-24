@@ -81,6 +81,12 @@ export interface GitBranch {
   is_current: boolean;
 }
 
+export interface FsDirEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+}
+
 export const gitCommands = {
   status: (projectPath: string) =>
     invoke<GitFile[]>("git_status", { projectPath }),
@@ -96,4 +102,23 @@ export const gitCommands = {
 
   branches: (projectPath: string) =>
     invoke<GitBranch[]>("git_branches", { projectPath }),
+};
+
+// ─── Filesystem ───────────────────────────────────────────────────────────────
+
+export const fsCommands = {
+  exists: (path: string) =>
+    invoke<boolean>("fs_exists", { path }),
+
+  readText: (path: string) =>
+    invoke<string>("fs_read_text", { path }),
+
+  writeText: (path: string, content: string) =>
+    invoke<void>("fs_write_text", { path, content }),
+
+  mkdir: (path: string) =>
+    invoke<void>("fs_mkdir", { path }),
+
+  listDir: (path: string) =>
+    invoke<FsDirEntry[]>("fs_list_dir", { path }),
 };

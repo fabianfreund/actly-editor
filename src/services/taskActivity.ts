@@ -9,7 +9,8 @@ function statusLabel(status: TaskStatus): string {
 export async function updateTaskStatusWithActivity(task: Task, status: TaskStatus): Promise<void> {
   if (task.status === status) return;
 
+  const workspaceId = task.workspace_id ?? task.id;
   await dbUpdateTaskStatus(task.id, status);
   useTasksStore.getState().upsertTask({ ...task, status });
-  await dbAddTaskEvent(task.id, "state_change", `Moved to ${statusLabel(status)}`).catch(() => null);
+  await dbAddTaskEvent(task.id, workspaceId, "state_change", `Moved to ${statusLabel(status)}`).catch(() => null);
 }

@@ -3,7 +3,7 @@
 > [!NOTE]
 > Working desktop builds are coming in the next few days.
 
-Vibecode your app in a desktop workspace built for planning, building, and launching with AI.
+**Agentic coding** — build your app in a desktop workspace designed for planning, building, and launching with AI agents.
 
 Actly Editor is a Jira-meets-IDE workspace for shipping apps with coding agents. Instead of bouncing between tickets, chat, terminal tabs, and deployment notes, you get one desktop app where the plan, the builders, the terminal, and the project context all stay in view.
 
@@ -14,6 +14,7 @@ Follow progress and build updates on X: [@FabianXR_Builds](https://x.com/FabianX
 ![Actly Editor screenshot](docs/images/header_image.jpg)
 
 ![Status: MVP](https://img.shields.io/badge/status-MVP-blue)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/fabianfreund/actly-editor?utm_source=oss&utm_medium=github&utm_campaign=fabianfreund%2Factly-editor&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 ## What It Does
 
@@ -83,6 +84,39 @@ npm run build
 npm run tauri:build
 ```
 
+## Building for Install
+
+```bash
+# Build macOS app and DMG installer (auto-increments patch version)
+npm run build:macos
+```
+
+Output:
+- `.app` bundle: `src-tauri/target/release/bundle/macos/Actly Editor.app`
+- `.dmg` installer: `src-tauri/target/release/bundle/dmg/Actly Editor_0.1.2_aarch64.dmg`
+
+Install by opening the `.dmg` and dragging the app to Applications.
+
+## Version Management
+
+The app uses standard semver (`major.minor.patch`) everywhere. The `build:macos` command increments the patch version before creating a production build.
+
+```bash
+# Show current version
+npm run version:show
+
+# Bump version
+npm run version:bump -- major   # e.g., 0.1.2 -> 1.0.0
+npm run version:bump -- minor   # e.g., 0.1.2 -> 0.2.0
+npm run version:bump -- patch   # e.g., 0.1.2 -> 0.1.3
+npm run version:bump -- build   # alias for patch
+
+# Increment patch version only (used by build:macos automatically)
+npm run version:increment
+```
+
+The `build:macos` command automatically increments the patch version before building. `package.json`, `tauri.conf.json`, and `version.json` all stay aligned on the same semver value.
+
 On first launch, open a project folder. If the project does not have an `.actly/` folder yet, the app can scaffold and initialize it for you.
 
 ## How To Use It
@@ -119,6 +153,7 @@ actly-editor/
 - [Panels](docs/panels.md)
 - [Agents](docs/agents.md)
 - [Codex Integration](docs/codex-integration.md)
+- [Documentation Standards](docs/documentation.md)
 
 ## Roadmap
 

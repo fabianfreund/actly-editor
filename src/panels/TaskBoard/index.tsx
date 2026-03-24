@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import { Plus } from "lucide-react";
 import { useTasksStore, Task } from "../../store/tasks";
 import { useAgentsStore } from "../../store/agents";
@@ -36,9 +36,19 @@ export default function TaskBoard() {
     }
   };
 
-  const handleStatusChange = async (task: Task, status: string) => {
-    await updateTaskStatusWithActivity(task, status as Task["status"]);
-  };
+  // ⚡ Bolt Optimization: Stabilize callbacks to prevent all TaskRow items
+  // from re-rendering on every local state update or task selection change in TaskBoard.
+  const handleStatusChange = useCallback(async (taskId: string, status: string) => {
+    const task = useTasksStore.getState().tasks.find(t => t.id === taskId);
+    if (task) {
+      await updateTaskStatusWithActivity(task, status as Task["status"]);
+    }
+  }, []);
+
+  const handleTaskClick = useCallback((taskId: string) => {
+    setActiveTaskId(taskId);
+    focusPanel("task-detail");
+  }, [setActiveTaskId]);
 
   return (
     <div className="panel-full">
@@ -97,8 +107,8 @@ export default function TaskBoard() {
                 task={task}
                 active={task.id === activeTaskId}
                 runState={getTaskRunState(task, sessions)}
-                onClick={() => { setActiveTaskId(task.id); focusPanel("task-detail"); }}
-                onStatusChange={(s) => handleStatusChange(task, s)}
+                onClick={handleTaskClick}
+                onStatusChange={handleStatusChange}
               />
             ))}
           </ul>
@@ -108,7 +118,9 @@ export default function TaskBoard() {
   );
 }
 
-function TaskRow({
+// ⚡ Bolt Optimization: Memoize TaskRow so it only re-renders when its specific
+// task data or active state changes, avoiding O(N) re-renders when one task updates.
+const TaskRow = memo(function TaskRow({
   task,
   active,
   runState,
@@ -118,12 +130,12 @@ function TaskRow({
   task: Task;
   active: boolean;
   runState: ReturnType<typeof getTaskRunState>;
-  onClick: () => void;
-  onStatusChange: (status: string) => void;
+  onClick: (taskId: string) => void;
+  onStatusChange: (taskId: string, status: string) => void;
 }) {
   return (
     <li
-      onClick={onClick}
+      onClick={() => onClick(task.id)}
       style={{
         padding: "8px 12px",
         cursor: "pointer",
@@ -152,7 +164,7 @@ function TaskRow({
         <select
           value={task.status}
           onClick={(e) => e.stopPropagation()}
-          onChange={(e) => onStatusChange(e.target.value)}
+          onChange={(e) => onStatusChange(task.id, e.target.value)}
           style={{
             background: "var(--bg-elevated)",
             border: "1px solid var(--border-default)",
@@ -172,4 +184,4 @@ function TaskRow({
       </div>
     </li>
   );
-}
+});

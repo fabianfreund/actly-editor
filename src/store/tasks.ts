@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
-export type TaskStatus = "icebox" | "improving" | "planned" | "todo" | "in_progress" | "done" | "blocked" | "failed";
+// Note: 'todo' status is legacy - tasks should use 'planned' instead
+export type TaskStatus = "icebox" | "planned" | "in_progress" | "done" | "failed";
 
 export interface Task {
   id: string;
@@ -9,6 +10,7 @@ export interface Task {
   status: TaskStatus;
   assigned_agent_id: string | null;
   refs_json: string; // JSON: Array<{ label: string; url: string }>
+  workspace_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +29,7 @@ export interface TaskEvent {
   content: string;
   actor: string;
   metadata: string | null;
+  workspace_id: string | null;
   created_at: string;
 }
 
@@ -36,6 +39,7 @@ export interface TaskAttachment {
   name: string;
   path: string;
   mime: string;
+  workspace_id: string | null;
   created_at: string;
 }
 
@@ -48,6 +52,7 @@ interface TasksState {
   removeTask: (taskId: string) => void;
   setEvents: (taskId: string, events: TaskEvent[]) => void;
   addEvent: (event: TaskEvent) => void;
+  updateEvent: (event: TaskEvent) => void;
   setAttachments: (taskId: string, attachments: TaskAttachment[]) => void;
   addAttachment: (attachment: TaskAttachment) => void;
   removeAttachment: (taskId: string, attachmentId: string) => void;
@@ -91,6 +96,16 @@ export const useTasksStore = create<TasksState>((set) => ({
     set((s) => {
       const existing = s.events[event.task_id] ?? [];
       return { events: { ...s.events, [event.task_id]: [...existing, event] } };
+    }),
+
+  updateEvent: (event) =>
+    set((s) => {
+      const existing = s.events[event.task_id] ?? [];
+      const idx = existing.findIndex((e) => e.id === event.id);
+      if (idx < 0) return s;
+      const next = [...existing];
+      next[idx] = event;
+      return { events: { ...s.events, [event.task_id]: next } };
     }),
 
   setAttachments: (taskId, attachments) =>
