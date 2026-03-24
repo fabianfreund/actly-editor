@@ -13,7 +13,6 @@ function getLatestTaskSession(taskId: string, sessions: Session[]): Session | nu
 export function getTaskRunState(task: Task, sessions: Session[]): TaskRunState {
   if (task.status === "done") return "finished";
   if (task.status === "failed") return "needs_intervention";
-  if (task.status === "blocked") return "needs_intervention";
 
   const latestSession = getLatestTaskSession(task.id, sessions);
   if (!latestSession) return "idle";

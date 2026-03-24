@@ -28,6 +28,10 @@ function getFullVersion(data: VersionData): string {
   return `${data.major}.${data.minor}.${data.patch}.${data.build}`;
 }
 
+function getSemver(data: VersionData): string {
+  return `${data.major}.${data.minor}.${data.patch}`;
+}
+
 function bumpVersion(part: string): void {
   const data = getVersionFile();
   
@@ -70,17 +74,17 @@ function incrementBuild(): void {
 }
 
 function updateConfigs(data: VersionData): void {
-  const fullVersion = getFullVersion(data);
-  
-  // Update package.json
+  const semver = getSemver(data);
+
+  // Update package.json (semver only — npm does not support 4-part versions)
   const packageJson = JSON.parse(readFileSync(PACKAGE_FILE, 'utf-8'));
-  packageJson.version = fullVersion;
+  packageJson.version = semver;
   writeFileSync(PACKAGE_FILE, JSON.stringify(packageJson, null, 2) + '\n');
-  
-  // Update tauri.conf.json
+
+  // Update tauri.conf.json (semver only — Tauri requires valid semver)
   if (existsSync(TAURI_CONFIG)) {
     const tauriConfig = JSON.parse(readFileSync(TAURI_CONFIG, 'utf-8'));
-    tauriConfig.version = fullVersion;
+    tauriConfig.version = semver;
     writeFileSync(TAURI_CONFIG, JSON.stringify(tauriConfig, null, 2) + '\n');
   }
 }

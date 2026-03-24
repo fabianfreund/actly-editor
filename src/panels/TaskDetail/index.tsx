@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Paperclip, Link, X, Plus, MessageSquare, GitCommit, AlertCircle, CheckCircle, Clock, ArrowRight, RotateCcw, Trash2, Play } from "lucide-react";
+import { Paperclip, Link, X, Plus, MessageSquare, GitCommit, AlertCircle, Clock, ArrowRight, RotateCcw, Trash2, Play } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspaceStore } from "../../store/workspace";
 import { useTasksStore, Task, TaskEvent } from "../../store/tasks";
@@ -8,12 +8,15 @@ import { TaskRunStateBadge, getTaskRunState } from "../../components/TaskRunStat
 import {
   dbGetTaskEvents, dbAddTaskEvent, dbListTasks, dbUpdateTask, dbDeleteTask,
   dbListAttachments, dbAddAttachment, dbDeleteAttachment, dbListAgents,
-  dbClearTaskEvents,
+  dbClearTaskEvents, dbUpdateTaskEventMetadata,
 } from "../../services/db";
 import { navigateMode } from "../../services/layoutEvents";
 import { startAgent, stopTaskSessions } from "../../services/agentRunner";
 import { updateTaskStatusWithActivity } from "../../services/taskActivity";
 import { FormattedText } from "../../components/FormattedText";
+import { ApprovalCard, type ApprovalState } from "../../components/ApprovalCard";
+import { getCodexClient } from "../../services/codex";
+import type { ApprovalDecision } from "../../services/codex";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -39,26 +42,37 @@ function parseRefs(json: string): Ref[] {
   try { return JSON.parse(json) ?? []; } catch { return []; }
 }
 
+interface ActlyActivityMeta {
+  type: "activity" | "question" | "summary";
+  text: string;
+  items?: Array<{ label: string; detail?: string }>;
+}
+
+function parseActivityMeta(metadata: string | null): ActlyActivityMeta | null {
+  if (!metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata) as Record<string, unknown>;
+    if (parsed.type === "activity" || parsed.type === "question" || parsed.type === "summary") {
+      return parsed as unknown as ActlyActivityMeta;
+    }
+    return null;
+  } catch { return null; }
+}
+
 // ─── status options ───────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS = ["icebox", "improving", "planned", "in_progress", "done", "blocked"] as const;
+const STATUS_OPTIONS = ["icebox", "planned", "in_progress", "done"] as const;
 const STATUS_COLORS: Record<string, string> = {
   icebox: "var(--text-muted)",
-  improving: "var(--text-warning)",
   planned: "var(--text-muted)",
   todo: "var(--text-muted)",
   in_progress: "var(--accent)",
   done: "var(--status-done)",
-  blocked: "var(--status-blocked)",
   failed: "var(--text-error)",
 };
 
 const EVENT_ICONS: Record<string, React.ReactNode> = {
   state_change: <GitCommit size={13} />,
-  agent_message: <MessageSquare size={13} style={{ color: "var(--accent)" }} />,
-  user_comment: <MessageSquare size={13} />,
-  agent_question: <AlertCircle size={13} style={{ color: "var(--text-warning)" }} />,
-  approval: <CheckCircle size={13} style={{ color: "var(--status-done)" }} />,
 };
 
 // ─── Section heading ──────────────────────────────────────────────────────────
@@ -77,8 +91,8 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function TaskDetail() {
-  const { activeId, activeTaskId, projectPath, codexPath, setActiveTaskId } = useWorkspaceStore();
-  const { tasks, events, attachments, setTasks, setEvents, addEvent, upsertTask, removeTask, setAttachments, addAttachment, removeAttachment } = useTasksStore();
+  const { activeId, activeTaskId, projectPath, codexPath, codexPort, setActiveTaskId } = useWorkspaceStore();
+  const { tasks, events, attachments, setTasks, setEvents, addEvent, updateEvent, upsertTask, removeTask, setAttachments, addAttachment, removeAttachment } = useTasksStore();
   const { agents, sessions, setAgents, setSessions } = useAgentsStore();
 
   const task = tasks.find((t) => t.id === activeTaskId);
@@ -160,22 +174,13 @@ export default function TaskDetail() {
     return freshAgents;
   }, [agents, setAgents]);
 
-  const getFreshAgentById = useCallback(async (agentId: string) => {
-    const freshAgents = await getFreshAgents();
-    return freshAgents.find((candidate) => candidate.id === agentId)
-      ?? agents.find((candidate) => candidate.id === agentId)
-      ?? null;
-  }, [agents, getFreshAgents]);
-
   const runTaskWithAgent = useCallback(async (agent: NonNullable<typeof agents[number]>, initialMessage?: string) => {
     if (!task || !projectPath) return;
-    const freshAgent = await getFreshAgentById(agent.id);
-    if (!freshAgent) return;
     await startAgent({
       taskId: task.id,
-      agentId: freshAgent.id,
+      agentId: agent.id,
       task,
-      agent: freshAgent,
+      agent,
       projectPath,
       codexPath,
       initialMessage,
@@ -183,7 +188,7 @@ export default function TaskDetail() {
         setSessions([...useAgentsStore.getState().sessions, session]);
       },
     });
-  }, [codexPath, projectPath, task, setSessions, getFreshAgentById]);
+  }, [codexPath, projectPath, task, setSessions]);
 
   const handleAgentChange = async (agentId: string) => {
     await saveField({ assigned_agent_id: agentId || null });
@@ -282,24 +287,21 @@ export default function TaskDetail() {
 
   const handleRestartTask = async () => {
     if (!task || !projectPath) return;
-
-    const freshAgents = await getFreshAgents();
+    const currentAgents = useAgentsStore.getState().agents;
     const agent =
-      freshAgents.find((candidate) => candidate.id === task.assigned_agent_id) ??
-      freshAgents.find((candidate) => candidate.role === "builder") ??
-      freshAgents[0];
-
+      currentAgents.find((a) => a.id === task.assigned_agent_id) ??
+      currentAgents.find((a) => a.role === "builder") ??
+      currentAgents[0];
     if (!agent) return;
-
     await runTaskWithAgent(agent);
   };
 
   const handleStartAssignedAgent = async () => {
     if (!pendingAssignedAgentId) return;
-    const agent = await getFreshAgentById(pendingAssignedAgentId);
+    const agent = useAgentsStore.getState().agents.find((a) => a.id === pendingAssignedAgentId) ?? null;
     if (!agent) return;
-    await runTaskWithAgent(agent);
     setPendingAssignedAgentId(null);
+    await runTaskWithAgent(agent);
   };
 
   const insertMention = (agentId: string) => {
@@ -337,11 +339,17 @@ export default function TaskDetail() {
 
   return (
     <div className="panel-full" style={{ overflowY: "auto" }}>
-      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 24, minHeight: "100%" }}>
 
-        {/* ── Title ── */}
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* ── Sticky header ── */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 10,
+        background: "var(--bg-base)",
+        borderBottom: "1px solid var(--border-default)",
+        padding: "16px 20px 12px",
+      }}>
+        {/* Title row */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             {editingTitle ? (
               <input
                 ref={titleInputRef}
@@ -350,7 +358,7 @@ export default function TaskDetail() {
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={handleTitleBlur}
                 onKeyDown={(e) => { if (e.key === "Enter") titleInputRef.current?.blur(); if (e.key === "Escape") { setTitleDraft(task.title); setEditingTitle(false); } }}
-                style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, flex: 1, padding: "2px 6px" }}
+                style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, width: "100%", padding: "2px 6px" }}
                 autoFocus
               />
             ) : (
@@ -362,37 +370,35 @@ export default function TaskDetail() {
                 {task.title}
               </h2>
             )}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <TaskRunStateBadge state={runState} />
-              {task.status === "failed" && (
-                <button
-                  className="btn btn-ghost"
-                  onClick={handleRestartTask}
-                  style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)" }}
-                >
-                  <RotateCcw size={12} />
-                  Restart Task
-                </button>
-              )}
-              <button
-                className="btn btn-ghost"
-                onClick={() => navigateMode("develop", task.id)}
-                style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)" }}
-              >
-                <ArrowRight size={12} />
-                Open In Develop
-              </button>
-              <button
-                className="btn btn-ghost"
-                onClick={handleDeleteTask}
-                style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)", color: "var(--text-error)" }}
-              >
-                <Trash2 size={12} />
-                Delete Task
-              </button>
-            </div>
           </div>
+          {/* Delete — icon only, right-aligned */}
+          <button
+            className="btn btn-ghost"
+            onClick={handleDeleteTask}
+            title="Delete task"
+            style={{ padding: "4px 6px", color: "var(--text-error)", flexShrink: 0 }}
+          >
+            <Trash2 size={14} />
+          </button>
         </div>
+
+        {/* Action row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <TaskRunStateBadge state={runState} />
+          {task.status === "failed" && (
+            <button className="btn btn-ghost" onClick={handleRestartTask} style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)" }}>
+              <RotateCcw size={12} />
+              Restart Task
+            </button>
+          )}
+          <button className="btn btn-ghost" onClick={() => navigateMode("develop", task.id)} style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)" }}>
+            <ArrowRight size={12} />
+            Open In Develop
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
 
         {/* ── Meta row ── */}
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -454,8 +460,7 @@ export default function TaskDetail() {
             placeholder="Type a description or add notes here…"
             value={descDraft}
             onChange={(e) => handleDescChange(e.target.value)}
-            rows={5}
-            style={{ resize: "vertical", lineHeight: 1.6, fontFamily: "var(--font-sans)", fontSize: "var(--font-size-sm)" }}
+            style={{ resize: "vertical", minHeight: 100, lineHeight: 1.6, fontFamily: "var(--font-sans)", fontSize: "var(--font-size-sm)" }}
           />
         </Section>
 
@@ -520,21 +525,21 @@ export default function TaskDetail() {
 
         {/* ── Activity ── */}
         <Section label="Activity">
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -4 }}>
-            <button
-              className="btn btn-ghost"
-              onClick={handleClearActivity}
-              disabled={taskEvents.length === 0}
-              style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)" }}
-            >
-              Clear
-            </button>
-          </div>
           {taskEvents.length === 0 ? (
             <div style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)", padding: "8px 0" }}>No activity yet</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              {taskEvents.map((event) => <TimelineEvent key={event.id} event={event} rootPath={projectPath} />)}
+              {taskEvents.map((event) => (
+                <TimelineEvent
+                  key={event.id}
+                  event={event}
+                  rootPath={projectPath}
+                  codexPort={codexPort}
+                  sessions={sessions}
+                  activeTaskId={activeTaskId}
+                  onEventUpdated={updateEvent}
+                />
+              ))}
               <div ref={eventsEndRef} />
             </div>
           )}
@@ -623,35 +628,200 @@ export default function TaskDetail() {
   );
 }
 
-function TimelineEvent({ event, rootPath }: { event: TaskEvent; rootPath?: string | null }) {
+function TimelineEvent({
+  event,
+  rootPath,
+  codexPort,
+  sessions,
+  activeTaskId,
+  onEventUpdated,
+}: {
+  event: TaskEvent;
+  rootPath?: string | null;
+  codexPort: number | null;
+  sessions: import("../../store/agents").Session[];
+  activeTaskId: string | null;
+  onEventUpdated: (updated: TaskEvent) => void;
+}) {
+  // ── Status divider ────────────────────────────────────────────────────────
   if (event.type === "state_change" && event.content.startsWith("Moved to ")) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0" }}>
-        <div style={{ flex: 1, height: 1, background: "var(--border-default)", opacity: 0.7 }} />
+        <div style={{ flex: 1, height: 1, background: "var(--border-default)", opacity: 0.5 }} />
         <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
           {event.content}
         </div>
-        <div style={{ flex: 1, height: 1, background: "var(--border-default)", opacity: 0.7 }} />
+        <div style={{ flex: 1, height: 1, background: "var(--border-default)", opacity: 0.5 }} />
       </div>
     );
   }
 
-  const icon = EVENT_ICONS[event.type] ?? <Clock size={13} />;
-  return (
-    <div style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border-default)" }}>
-      <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-secondary)", marginTop: 2 }}>
-        {icon}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+  // ── Approval card ─────────────────────────────────────────────────────────
+  if (event.type === "approval") {
+    let meta: { request_id: string; status: string; decision?: string } = { request_id: "", status: "pending" };
+    try { meta = JSON.parse(event.metadata ?? "{}"); } catch { /* use default */ }
+    const stateMap: Record<string, ApprovalState> = {
+      pending: "pending", accepted: "accepted", alwaysApproved: "alwaysApproved", declined: "declined",
+    };
+    const state: ApprovalState = stateMap[meta.status] ?? "pending";
+
+    const handleDecision = async (requestId: string, decision: ApprovalDecision) => {
+      if (!codexPort) return;
+      try {
+        const client = await getCodexClient(codexPort);
+        client.respondToApproval(requestId, decision);
+        // Resume active session
+        const { dbUpdateSession } = await import("../../services/db");
+        const activeSession = sessions.filter((s) => s.task_id === activeTaskId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+        if (activeSession) await dbUpdateSession(activeSession.id, { status: "running" }).catch(() => {});
+      } catch (e) {
+        console.error("Failed to respond to approval:", e);
+      }
+      const resolved: ApprovalState =
+        decision === "accept" ? "accepted" :
+        decision === "acceptForSession" ? "alwaysApproved" : "declined";
+      const newMeta = JSON.stringify({ ...meta, status: resolved, decision });
+      await dbUpdateTaskEventMetadata(event.id, newMeta).catch(() => {});
+      onEventUpdated({ ...event, metadata: newMeta });
+    };
+
+    return (
+      <div style={{ padding: "6px 0" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
           <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--text-secondary)", textTransform: "capitalize" }}>{event.actor}</span>
           <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
             {new Date(event.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
-        <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--text-primary)", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        <ApprovalCard
+          description={event.content.replace(/^Approval requested:\s*/i, "")}
+          state={state}
+          requestId={meta.request_id}
+          rootPath={rootPath}
+          onDecision={handleDecision}
+        />
+      </div>
+    );
+  }
+
+  // ── Agent message bubble ──────────────────────────────────────────────────
+  if (event.type === "agent_message") {
+    const activityMeta = parseActivityMeta(event.metadata);
+    return (
+      <div style={{ padding: "6px 0" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+          <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--accent)", textTransform: "capitalize" }}>{event.actor}</span>
+          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
+            {new Date(event.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </div>
+        <div
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "var(--bg-surface)",
+            border: "1px solid rgba(255,255,255,0.04)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
+            fontSize: "var(--font-size-sm)",
+            color: "var(--text-primary)",
+            lineHeight: 1.6,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
           <FormattedText text={event.content} rootPath={rootPath} />
-        </p>
+          {activityMeta?.items && activityMeta.items.length > 0 && (
+            <ul style={{ margin: "8px 0 0 0", padding: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 3 }}>
+              {activityMeta.items.map((item, i) => (
+                <li key={i} style={{ fontSize: "var(--font-size-xs)", color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                  <span style={{ fontWeight: 600 }}>{item.label}</span>
+                  {item.detail && <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>{item.detail}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Agent question ────────────────────────────────────────────────────────
+  if (event.type === "agent_question") {
+    return (
+      <div style={{ padding: "6px 0" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+          <AlertCircle size={12} style={{ color: "var(--text-warning)", marginBottom: -1 }} />
+          <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--text-warning)", textTransform: "capitalize" }}>{event.actor}</span>
+          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
+            {new Date(event.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </div>
+        <div
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "rgba(204,167,0,0.06)",
+            border: "1px solid rgba(204,167,0,0.25)",
+            fontSize: "var(--font-size-sm)",
+            color: "var(--text-primary)",
+            lineHeight: 1.6,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          <FormattedText text={event.content} rootPath={rootPath} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── User comment ──────────────────────────────────────────────────────────
+  if (event.type === "user_comment") {
+    return (
+      <div style={{ padding: "6px 0", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
+            {new Date(event.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </span>
+          <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--text-secondary)" }}>You</span>
+        </div>
+        <div
+          style={{
+            padding: "8px 12px",
+            borderRadius: "10px 10px 2px 10px",
+            background: "rgba(0,120,212,0.12)",
+            border: "1px solid rgba(0,120,212,0.2)",
+            fontSize: "var(--font-size-sm)",
+            color: "var(--text-primary)",
+            lineHeight: 1.5,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maxWidth: "90%",
+          }}
+        >
+          {event.content}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Generic fallback (step / approval legacy / etc.) ─────────────────────
+  const icon = EVENT_ICONS[event.type] ?? <Clock size={13} />;
+  return (
+    <div style={{ display: "flex", gap: 8, padding: "5px 0", alignItems: "flex-start" }}>
+      <div style={{ width: 20, height: 20, borderRadius: "50%", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-muted)", marginTop: 2 }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 1 }}>
+          <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--text-muted)", textTransform: "capitalize" }}>{event.actor}</span>
+          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
+            {new Date(event.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </div>
+        <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-secondary)", lineHeight: 1.5, wordBreak: "break-word" }}>
+          {event.content}
+        </div>
       </div>
     </div>
   );

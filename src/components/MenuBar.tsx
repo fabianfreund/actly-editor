@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { Actions, DockLocation, Model } from "flexlayout-react";
 import { PANELS } from "../layout/panels.registry";
 import { useWorkspaceStore } from "../store/workspace";
 import { useTasksStore } from "../store/tasks";
 import { dbGetWorkspaceActivityCount } from "../services/db";
+
+function VsCodeIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M74.6 3.2L39.3 35.5 16 17 3 28l23 22-23 22 13 11 23.3-18.5L74.6 96.8 97 85.6V14.4L74.6 3.2zm-.3 66.4L52.5 50l21.8-19.6v39.2z" />
+    </svg>
+  );
+}
 
 interface MenuBarProps {
   model?: Model;
@@ -82,7 +91,7 @@ export default function MenuBar({ model, openPanelIds, onLayoutChanged }: MenuBa
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
   const [workspaceActivityCounts, setWorkspaceActivityCounts] = useState<Record<string, number>>({});
   const barRef = useRef<HTMLDivElement>(null);
-  const { workspaces, activeId, openWorkspace, setActiveWorkspace, closeWorkspace } = useWorkspaceStore();
+  const { workspaces, activeId, projectPath, openWorkspace, setActiveWorkspace, closeWorkspace } = useWorkspaceStore();
   const { tasks, events } = useTasksStore();
 
   useEffect(() => {
@@ -375,6 +384,32 @@ export default function MenuBar({ model, openPanelIds, onLayoutChanged }: MenuBa
           +
         </button>
       </div>
+
+      {/* ── Right actions ── */}
+      {projectPath && (
+        <button
+          onClick={() => invoke("open_in_vscode", { path: projectPath })}
+          title="Open in VS Code"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            background: "transparent",
+            border: "1px solid var(--border-default)",
+            color: "var(--text-secondary)",
+            fontSize: "var(--font-size-xs)",
+            padding: "0 8px",
+            height: 24,
+            borderRadius: 4,
+            cursor: "pointer",
+            flexShrink: 0,
+            marginLeft: 8,
+          }}
+        >
+          <VsCodeIcon size={13} />
+          <span>VS Code</span>
+        </button>
+      )}
     </div>
   );
 }

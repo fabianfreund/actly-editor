@@ -14,6 +14,7 @@ let _db: Database | null = null;
 const BUILT_IN_AGENT_NAMES: Record<string, string> = {
   "agent-planner": "Patty the Planner",
   "agent-builder": "Bob the Builder",
+  "agent-initializer": "Izzy the Initializer",
 };
 
 async function getDb(): Promise<Database> {
@@ -26,7 +27,9 @@ async function getDb(): Promise<Database> {
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 function normalizeStatus(raw: string): Task["status"] {
-  if (raw === "todo") return "planned"; // legacy migration
+  if (raw === "todo") return "planned";       // legacy migration
+  if (raw === "improving") return "icebox";   // removed status
+  if (raw === "blocked") return "icebox";     // removed status
   return raw as Task["status"];
 }
 
@@ -39,15 +42,20 @@ export async function dbListTasks(workspaceId: string): Promise<Task[]> {
   return rows.map((r) => ({ ...r, status: normalizeStatus(r.status) }));
 }
 
-export async function dbCreateTask(title: string, workspaceId: string, description = ""): Promise<Task> {
+export async function dbCreateTask(
+  title: string,
+  workspaceId: string,
+  description = "",
+  assigned_agent_id: string | null = null
+): Promise<Task> {
   const db = await getDb();
   const id = uuidv4();
   const now = new Date().toISOString();
   await db.execute(
-    "INSERT INTO tasks (id, title, description, status, workspace_id, created_at, updated_at) VALUES (?, ?, ?, 'planned', ?, ?, ?)",
-    [id, title, description, workspaceId, now, now]
+    "INSERT INTO tasks (id, title, description, status, assigned_agent_id, workspace_id, created_at, updated_at) VALUES (?, ?, ?, 'planned', ?, ?, ?, ?)",
+    [id, title, description, assigned_agent_id, workspaceId, now, now]
   );
-  return { id, title, description, status: "planned", assigned_agent_id: null, refs_json: "[]", workspace_id: workspaceId, created_at: now, updated_at: now };
+  return { id, title, description, status: "planned", assigned_agent_id, refs_json: "[]", workspace_id: workspaceId, created_at: now, updated_at: now };
 }
 
 export async function dbUpdateTask(
@@ -132,6 +140,11 @@ export async function dbAddTaskEvent(
     [id, taskId, workspaceId, type, content, actor, metadata, now]
   );
   return { id, task_id: taskId, workspace_id: workspaceId, type: type as TaskEvent["type"], content, actor, metadata, created_at: now };
+}
+
+export async function dbUpdateTaskEventMetadata(eventId: string, metadata: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("UPDATE task_events SET metadata = ? WHERE id = ?", [metadata, eventId]);
 }
 
 export async function dbClearTaskEvents(taskId: string): Promise<void> {

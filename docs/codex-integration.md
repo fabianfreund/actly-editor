@@ -262,6 +262,7 @@ For onboarding / background agents use `"never"`. For interactive developer sess
 Actly defaults to:
 - Planner: `gpt-5.4-mini`
 - Builder: `gpt-5.4`
+- Initializer: `gpt-5.4-mini`
 
 Older saved agent models such as `codex-1` are normalized to supported values when agents are loaded, because ChatGPT-account logins can reject those legacy model ids.
 
@@ -348,6 +349,7 @@ Actly's current integration is implemented in `src/services/codex.ts` and `src/s
 6. `turn/started` captures the active `turnId`.
 7. `turn/interrupt` uses both `threadId` and `turnId`.
 8. Approval requests are answered by replying directly to the request `id`.
+9. Each `item/agentMessage/delta` is scanned by `extractActlyActivities()` for `<actly_activity>` XML blocks. Parsed blocks are stored as structured task events and rendered as rich cards in the TaskDetail timeline. See [Agents — Structured activity messages](agents.md#structured-activity-messages-actly_activity) for the full schema.
 
 This structure keeps thread lifecycle, turn lifecycle, and session persistence separate so we can extend the integration later with resume, steer, review mode, or thread listing.
 

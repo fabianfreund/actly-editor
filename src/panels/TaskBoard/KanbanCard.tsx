@@ -44,7 +44,7 @@ export default memo(function KanbanCard({ task, agents, isActive, runState, onCl
               color: "var(--text-primary)",
               lineHeight: 1.4,
               wordBreak: "break-word",
-              marginBottom: agent || task.status === "blocked" ? 5 : 0,
+              marginBottom: agent ? 5 : 0,
             }}
           >
             {task.title}
@@ -62,19 +62,6 @@ export default memo(function KanbanCard({ task, agents, isActive, runState, onCl
                 }}
               >
                 {agent.name}
-              </span>
-            )}
-            {task.status === "blocked" && runState !== "needs_intervention" && (
-              <span
-                style={{
-                  fontSize: "var(--font-size-xs)",
-                  color: "var(--status-blocked)",
-                  background: "rgba(244,135,113,0.1)",
-                  padding: "1px 6px",
-                  borderRadius: 3,
-                }}
-              >
-                blocked
               </span>
             )}
           </div>

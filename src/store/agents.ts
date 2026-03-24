@@ -3,7 +3,7 @@ import { create } from "zustand";
 export interface Agent {
   id: string;
   name: string;
-  role: "planner" | "builder";
+  role: "planner" | "builder" | "initializer";
   model: string;
   provider: string;
   approval_mode: "auto" | "full" | "readonly" | "never";
