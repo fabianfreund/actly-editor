@@ -39,10 +39,10 @@ a {
   min-height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.11), transparent 0 28%),
-    radial-gradient(circle at 80% 18%, rgba(112, 112, 112, 0.18), transparent 0 22%),
-    radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.08), transparent 0 30%),
-    linear-gradient(160deg, #020202 0%, #090909 35%, #111111 100%);
+    radial-gradient(circle at 18% 22%, rgba(64, 156, 255, 0.18), transparent 0 26%),
+    radial-gradient(circle at 82% 18%, rgba(0, 122, 204, 0.22), transparent 0 24%),
+    radial-gradient(circle at 50% 100%, rgba(37, 99, 235, 0.14), transparent 0 30%),
+    linear-gradient(165deg, #020202 0%, #04070d 38%, #0a1630 72%, #0d2247 100%);
 }
 
 .landing-grid {
@@ -69,7 +69,7 @@ a {
   left: -5rem;
   width: 24rem;
   height: 24rem;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(59, 130, 246, 0.18);
 }
 
 .orb-b {
@@ -77,54 +77,56 @@ a {
   top: 10rem;
   width: 20rem;
   height: 20rem;
-  background: rgba(139, 139, 139, 0.12);
+  background: rgba(14, 165, 233, 0.16);
 }
 
 .landing-shell {
   position: relative;
   z-index: 1;
-  width: min(1120px, calc(100% - 40px));
+  width: min(760px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 88px 0 72px;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
 }
 
 .hero {
-  max-width: 820px;
-  margin-bottom: 48px;
+  width: 100%;
+  text-align: center;
 }
 
-.eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 18px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.hero-icon {
+  width: 88px;
+  height: 88px;
+  margin-bottom: 22px;
+  border-radius: 22px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
 }
 
 .hero h1 {
   margin: 0;
-  max-width: 860px;
-  font-size: clamp(3rem, 7vw, 5.7rem);
+  font-size: clamp(3.2rem, 8vw, 5.6rem);
   line-height: 0.94;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.08em;
   font-weight: 700;
   color: #ffffff;
-  text-wrap: balance;
+}
+
+.hero-subtitle {
+  margin-top: 12px;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  color: rgba(255, 255, 255, 0.78);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .hero-copy {
-  margin: 24px 0 0;
-  max-width: 680px;
-  font-size: clamp(1.05rem, 2vw, 1.28rem);
-  line-height: 1.75;
+  margin: 26px auto 0;
+  max-width: 620px;
+  font-size: clamp(1rem, 2vw, 1.12rem);
+  line-height: 1.8;
   color: var(--muted);
 }
 
@@ -132,7 +134,8 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  margin-top: 32px;
+  justify-content: center;
+  margin-top: 30px;
 }
 
 .button {
@@ -174,77 +177,18 @@ a {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.info-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.info-card,
-.feature-card {
-  border: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.03) 100%);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(14px);
-}
-
-.info-card {
-  padding: 18px 20px;
-  border-radius: 18px;
-}
-
-.info-label {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 0.76rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-.info-card strong {
-  display: block;
-  font-size: 1rem;
-  line-height: 1.5;
-  color: #ffffff;
-}
-
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.feature-card {
-  padding: 28px 24px;
-  border-radius: 22px;
-}
-
-.feature-card h2 {
-  margin: 0 0 12px;
-  font-size: 1.22rem;
-  line-height: 1.2;
-  color: #ffffff;
-}
-
-.feature-card p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.72;
-  font-size: 0.98rem;
+.hero-note {
+  margin: 22px auto 0;
+  max-width: 540px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 0.92rem;
+  line-height: 1.7;
 }
 
 @media (max-width: 920px) {
   .landing-shell {
     width: min(100% - 28px, 1120px);
-    padding-top: 64px;
-  }
-
-  .info-strip,
-  .feature-grid {
-    grid-template-columns: 1fr;
+    padding: 40px 0;
   }
 }
 
