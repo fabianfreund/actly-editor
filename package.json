@@ -1,7 +1,7 @@
 {
   "name": "actly-editor",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,11 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "build:macos": "export PATH=\"$HOME/.cargo/bin:$PATH\" && npm run version:increment && npm run tauri:build",
+    "version:bump": "npx tsx scripts/version.ts bump",
+    "version:increment": "npx tsx scripts/version.ts increment",
+    "version:show": "npx tsx scripts/version.ts show"
   },
   "dependencies": {
     "@tanstack/react-query": "^5",
@@ -32,6 +36,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4",
     "@tauri-apps/cli": "^2",
+    "@types/node": "^25.5.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4",

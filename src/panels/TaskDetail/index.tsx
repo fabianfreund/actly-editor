@@ -77,7 +77,7 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function TaskDetail() {
-  const { activeTaskId, projectPath, codexPath, setActiveTaskId } = useWorkspaceStore();
+  const { activeId, activeTaskId, projectPath, codexPath, setActiveTaskId } = useWorkspaceStore();
   const { tasks, events, attachments, setTasks, setEvents, addEvent, upsertTask, removeTask, setAttachments, addAttachment, removeAttachment } = useTasksStore();
   const { agents, sessions, setAgents, setSessions } = useAgentsStore();
 
@@ -212,13 +212,13 @@ export default function TaskDetail() {
   // ── attachments ─────────────────────────────────────────────────────────────
 
   const handleAddAttachment = async () => {
-    if (!activeTaskId) return;
+    if (!activeTaskId || !activeId) return;
     const selected = await open({ directory: false, multiple: true });
     const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
     for (const path of paths) {
       const name = path.split("/").pop() ?? path;
       const mime = guessMime(path);
-      const att = await dbAddAttachment(activeTaskId, name, path, mime).catch(() => null);
+      const att = await dbAddAttachment(activeTaskId, activeId, name, path, mime).catch(() => null);
       if (att) addAttachment(att);
     }
   };
@@ -232,11 +232,11 @@ export default function TaskDetail() {
   // ── comment ──────────────────────────────────────────────────────────────────
 
   const handleComment = useCallback(async () => {
-    if (!activeTaskId || !comment.trim()) return;
+    if (!activeTaskId || !activeId || !comment.trim()) return;
     const trimmedComment = comment.trim();
     setComment("");
     setMentionQuery(null);
-    const event = await dbAddTaskEvent(activeTaskId, "user_comment", trimmedComment).catch(() => null);
+    const event = await dbAddTaskEvent(activeTaskId, activeId, "user_comment", trimmedComment).catch(() => null);
     if (event) addEvent(event);
 
     const mentionMatch = trimmedComment.match(/(^|\s)@([a-zA-Z0-9_-]+)/);

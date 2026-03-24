@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Actly Editor",
   "identifier": "io.actly.editor",
-  "version": "0.1.0",
+  "version": "0.1.1.1",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -44,7 +44,9 @@
       "open": true
     },
     "sql": {
-      "preloadConnections": ["sqlite:actly.db"]
+      "preloadConnections": [
+        "sqlite:actly.db"
+      ]
     }
   }
 }

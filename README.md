@@ -83,6 +83,39 @@ npm run build
 npm run tauri:build
 ```
 
+## Building for Install
+
+```bash
+# Build macOS app and DMG installer (auto-increments build number)
+npm run build:macos
+```
+
+Output:
+- `.app` bundle: `src-tauri/target/release/bundle/macos/Actly Editor.app`
+- `.dmg` installer: `src-tauri/target/release/bundle/dmg/Actly Editor_0.1.1.1_aarch64.dmg`
+
+Install by opening the `.dmg` and dragging the app to Applications.
+
+## Version Management
+
+The app uses semantic versioning with a build number: `major.minor.patch.build`
+
+```bash
+# Show current version
+npm run version:show
+
+# Bump version (resets build to 1)
+npm run version:bump -- major   # e.g., 0.1.1.1 -> 1.0.0.1
+npm run version:bump -- minor   # e.g., 0.1.1.1 -> 0.2.0.1
+npm run version:bump -- patch   # e.g., 0.1.1.1 -> 0.1.2.1
+npm run version:bump -- build   # e.g., 0.1.1.1 -> 0.1.1.2
+
+# Increment build number only
+npm run version:increment
+```
+
+The `build:macos` command automatically increments the build number before building.
+
 On first launch, open a project folder. If the project does not have an `.actly/` folder yet, the app can scaffold and initialize it for you.
 
 ## How To Use It
