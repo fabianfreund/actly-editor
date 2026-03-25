@@ -1,8 +1,5 @@
 # Actly Editor
 
-> [!NOTE]
-> Working desktop builds are coming in the next few days.
-
 **Agentic coding** — build your app in a desktop workspace designed for planning, building, and launching with AI agents.
 
 Actly Editor is a Jira-meets-IDE workspace for shipping apps with coding agents. Instead of bouncing between tickets, chat, terminal tabs, and deployment notes, you get one desktop app where the plan, the builders, the terminal, and the project context all stay in view.
