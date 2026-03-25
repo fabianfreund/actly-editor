@@ -108,7 +108,7 @@ export const gitCommands = {
 
 export const fsCommands = {
   exists: (path: string) =>
-    invoke<boolean>("fs_exists", { path }).catch(() => false),
+    invoke<boolean>("fs_exists", { path }),
 
   readText: (path: string) =>
     invoke<string>("fs_read_text", { path }),

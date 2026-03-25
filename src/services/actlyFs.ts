@@ -5,7 +5,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ActionDef } from "../panels/ActionPanel/index";
 
-const fsExists = (path: string): Promise<boolean> => invoke<boolean>("fs_exists", { path }).catch(() => false);
+const fsExists = (path: string): Promise<boolean> => invoke<boolean>("fs_exists", { path });
 const fsReadText = (path: string): Promise<string> => invoke("fs_read_text", { path });
 const fsWriteText = (path: string, content: string): Promise<void> =>
   invoke("fs_write_text", { path, content });

@@ -13,8 +13,9 @@ pub struct FsDirEntry {
 fn is_path_safe(path: &str) -> bool {
     let p = Path::new(path);
     for component in p.components() {
-        if let Component::ParentDir = component {
-            return false;
+        match component {
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return false,
+            _ => continue,
         }
     }
     true
@@ -26,7 +27,7 @@ pub fn fs_exists(path: String) -> Result<bool, String> {
     if !is_path_safe(&path) {
         return Err("Unsafe path detected".to_string());
     }
-    Ok(Path::new(&path).exists())
+    Path::new(&path).try_exists().map_err(|e| e.to_string())
 }
 
 /// Read the text content of a file.
