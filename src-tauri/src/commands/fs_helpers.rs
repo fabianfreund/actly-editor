@@ -10,21 +10,35 @@ pub struct FsDirEntry {
     is_dir: bool,
 }
 
+/// Check if a path contains directory traversal components ("..")
+fn is_path_safe(path: &str) -> bool {
+    !path.contains("..")
+}
+
 /// Check whether a path exists on disk.
 #[tauri::command]
-pub fn fs_exists(path: String) -> bool {
-    Path::new(&path).exists()
+pub fn fs_exists(path: String) -> Result<bool, String> {
+    if !is_path_safe(&path) {
+        return Err("Unsafe path detected".to_string());
+    }
+    Ok(Path::new(&path).exists())
 }
 
 /// Read the text content of a file.
 #[tauri::command]
 pub fn fs_read_text(path: String) -> Result<String, String> {
+    if !is_path_safe(&path) {
+        return Err("Unsafe path detected".to_string());
+    }
     fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
 /// Write text to a file, creating it (and parent dirs) if necessary.
 #[tauri::command]
 pub fn fs_write_text(path: String, content: String) -> Result<(), String> {
+    if !is_path_safe(&path) {
+        return Err("Unsafe path detected".to_string());
+    }
     if let Some(parent) = Path::new(&path).parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -34,6 +48,9 @@ pub fn fs_write_text(path: String, content: String) -> Result<(), String> {
 /// Create a directory (and all parents).
 #[tauri::command]
 pub fn fs_mkdir(path: String) -> Result<(), String> {
+    if !is_path_safe(&path) {
+        return Err("Unsafe path detected".to_string());
+    }
     fs::create_dir_all(&path).map_err(|e| e.to_string())
 }
 
