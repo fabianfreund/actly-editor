@@ -180,7 +180,6 @@ export class CodexClient {
   }
 
   private handleMessage(data: Record<string, unknown>) {
-    this.debug(`recv port=${this.port} ${this.stringifyForLog(data)}`);
     // Response to our request: { id, result } or { id, error }
     if ("id" in data && ("result" in data || "error" in data) && !("method" in data)) {
       const id = data.id as number;
@@ -642,6 +641,7 @@ export class CodexClient {
       serviceName: "actly-editor",
       ephemeral: true,
       model,
+      sandbox: "danger-full-access",
     };
     if (approvalPolicy) threadParams.approvalPolicy = approvalPolicy;
 

@@ -13,6 +13,7 @@ interface WorkspaceState {
   codexPort: number | null;
   activeTaskId: string | null;
   codexPath: string | null; // path to codex binary, null = use "codex" from PATH
+  yoloMode: boolean; // when true, agents auto-approve all actions (approval_mode: "never")
 
   // Derived convenience getter
   projectPath: string | null;
@@ -23,6 +24,7 @@ interface WorkspaceState {
   setCodexPort: (port: number | null) => void;
   setActiveTaskId: (id: string | null) => void;
   setCodexPath: (path: string | null) => void;
+  setYoloMode: (enabled: boolean) => void;
   hydrate: () => Promise<void>;
 }
 
@@ -46,6 +48,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   codexPort: null,
   activeTaskId: null,
   codexPath: null,
+  yoloMode: true,
   projectPath: null,
 
   openWorkspace: (path) => {
@@ -92,6 +95,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     } catch { /* not in Tauri */ }
   },
 
+  setYoloMode: async (enabled) => {
+    set({ yoloMode: enabled });
+    try {
+      const store = await load("workspace.json", { defaults: {}, autoSave: true });
+      await store.set("yoloMode", enabled);
+    } catch { /* not in Tauri */ }
+  },
+
   // Keep legacy compat
   setProjectPath: (path: string) => {
     get().openWorkspace(path);
@@ -123,6 +134,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // Load codex path
       const codexPath = await store.get<string>("codexPath");
       if (codexPath) set({ codexPath });
+
+      // Load yolo mode (defaults to true if never saved)
+      const yoloMode = await store.get<boolean>("yoloMode");
+      if (yoloMode !== null && yoloMode !== undefined) set({ yoloMode });
     } catch {
       // First run
     }

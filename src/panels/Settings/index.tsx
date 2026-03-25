@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Save, KeyRound, Bot, TerminalSquare, ChevronDown, ChevronRight } from "lucide-react";
+import { Save, KeyRound, Bot, TerminalSquare, ChevronDown, ChevronRight, ListTodo, Pencil, Trash2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
 import { useAgentsStore, type Agent } from "../../store/agents";
 import { useWorkspaceStore } from "../../store/workspace";
+import { useTemplatesStore, type CustomTaskTemplate } from "../../store/templates";
+import { TASK_TEMPLATES, type TaskTemplate } from "../../registries/tasks.registry";
 import { dbListAgents, dbUpsertAgent } from "../../services/db";
 import { codexCommands } from "../../services/tauri";
 import { SUPPORTED_MODELS, normalizeAgentModel } from "../../registries/models.registry";
@@ -12,7 +14,7 @@ import { getAgentDefaultSystemPrompt, getAgentWorkflow } from "../../registries/
 const PROVIDERS = ["openai", "minimax", "azure", "anthropic"];
 const APPROVAL_MODES = ["auto", "full", "readonly", "never"] as const;
 
-type SettingsSectionId = "codex" | "keys" | "agents" | "prompts";
+type SettingsSectionId = "codex" | "agents" | "prompts" | "tasks";
 
 interface SettingsSection {
   id: SettingsSectionId;
@@ -24,15 +26,9 @@ interface SettingsSection {
 const SECTIONS: SettingsSection[] = [
   {
     id: "codex",
-    label: "Codex",
-    description: "CLI path and runtime checks",
+    label: "General",
+    description: "Codex CLI, API keys, and runtime settings",
     Icon: TerminalSquare,
-  },
-  {
-    id: "keys",
-    label: "API Keys",
-    description: "Stored provider secrets",
-    Icon: KeyRound,
   },
   {
     id: "agents",
@@ -46,12 +42,21 @@ const SECTIONS: SettingsSection[] = [
     description: "Read-only effective instructions",
     Icon: Bot,
   },
+  {
+    id: "tasks",
+    label: "Tasks",
+    description: "Builtin and custom templates",
+    Icon: ListTodo,
+  },
 ];
 
 export default function Settings() {
   const { agents, setAgents } = useAgentsStore();
-  const { codexPath, setCodexPath, projectPath } = useWorkspaceStore();
+  const { codexPath, setCodexPath, projectPath, yoloMode, setYoloMode } = useWorkspaceStore();
+  const { customTemplates, addTemplate, updateTemplate, removeTemplate } = useTemplatesStore();
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("codex");
+  const [editingTemplate, setEditingTemplate] = useState<CustomTaskTemplate | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [draftCodexPath, setDraftCodexPath] = useState(codexPath ?? "");
@@ -146,6 +151,46 @@ export default function Settings() {
 
         <div className="panel-body" style={{ padding: 16 }}>
           {activeSection === "codex" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <SettingsSectionCard title="Yolo Mode" description="Auto-approve all agent actions. When enabled, agents never pause for confirmation." fullWidth>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, flexShrink: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={yoloMode}
+                    onChange={(e) => void setYoloMode(e.target.checked)}
+                    style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
+                  />
+                  <span
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      borderRadius: 20,
+                      background: yoloMode ? "var(--accent)" : "var(--bg-elevated)",
+                      border: "1px solid var(--border-default)",
+                      cursor: "pointer",
+                      transition: "background 0.2s",
+                    }}
+                  />
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 3,
+                      left: yoloMode ? 18 : 3,
+                      width: 12,
+                      height: 12,
+                      borderRadius: "50%",
+                      background: "white",
+                      transition: "left 0.2s",
+                      pointerEvents: "none",
+                    }}
+                  />
+                </label>
+                <span style={{ fontSize: "var(--font-size-sm)", color: yoloMode ? "var(--text-primary)" : "var(--text-muted)" }}>
+                  {yoloMode ? "Enabled — agents auto-approve everything" : "Disabled — agents respect per-agent approval mode"}
+                </span>
+              </div>
+            </SettingsSectionCard>
             <SettingsSectionCard title="Codex CLI" description='Choose a custom binary path or fall back to "codex" from PATH.' fullWidth>
               <FieldRow label='Binary path (leave empty to use "codex" from PATH)'>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -192,9 +237,6 @@ export default function Settings() {
                 </button>
               </div>
             </SettingsSectionCard>
-          )}
-
-          {activeSection === "keys" && (
             <SettingsSectionCard title="API Keys" description="Keys are stored in the local workspace store on this machine." fullWidth>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {["OPENAI_API_KEY", "MINIMAX_API_KEY"].map((key) => (
@@ -217,6 +259,7 @@ export default function Settings() {
                 </button>
               </div>
             </SettingsSectionCard>
+            </div>
           )}
 
           {activeSection === "agents" && (
@@ -224,6 +267,71 @@ export default function Settings() {
               {agents.map((agent) => (
                 <AgentEditor key={agent.id} agent={agent} usedModels={usedModels} onSave={handleSaveAgent} />
               ))}
+            </div>
+          )}
+
+          {activeSection === "tasks" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <SettingsSectionCard title="Built-in templates" description="These templates are always available and cannot be modified." fullWidth>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {TASK_TEMPLATES.map((template) => (
+                    <TemplateRow key={template.id} template={template} agents={agents} />
+                  ))}
+                </div>
+              </SettingsSectionCard>
+
+              <SettingsSectionCard title="Custom templates" description="Add your own reusable task templates." fullWidth>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {customTemplates.map((template) => (
+                    <TemplateRow
+                      key={template.id}
+                      template={template}
+                      agents={agents}
+                      onEdit={() => {
+                        setEditingTemplate(template);
+                        setShowAddForm(false);
+                      }}
+                      onDelete={() => void removeTemplate(template.id)}
+                    />
+                  ))}
+                  {customTemplates.length === 0 && !showAddForm && (
+                    <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", padding: "8px 0" }}>
+                      No custom templates yet.
+                    </div>
+                  )}
+                </div>
+
+                {editingTemplate && (
+                  <TemplateEditor
+                    initial={editingTemplate}
+                    agents={agents}
+                    onSave={async (t) => {
+                      await updateTemplate({ ...t, id: editingTemplate.id, isCustom: true });
+                      setEditingTemplate(null);
+                    }}
+                    onCancel={() => setEditingTemplate(null)}
+                  />
+                )}
+
+                {showAddForm && (
+                  <TemplateEditor
+                    agents={agents}
+                    onSave={async (t) => {
+                      await addTemplate(t);
+                      setShowAddForm(false);
+                    }}
+                    onCancel={() => setShowAddForm(false)}
+                  />
+                )}
+
+                {!showAddForm && !editingTemplate && (
+                  <div>
+                    <button className="btn btn-ghost" onClick={() => setShowAddForm(true)}>
+                      + Add template
+                    </button>
+                  </div>
+                )}
+              </SettingsSectionCard>
             </div>
           )}
 
@@ -526,11 +634,160 @@ function FieldRow({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <label style={{ fontSize: "var(--font-size-xs)", color: "var(--text-secondary)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <label
+        style={{
+          fontSize: "var(--font-size-xs)",
+          color: "var(--text-secondary)",
+          minWidth: 140,
+          flexShrink: 0,
+        }}
+      >
         {label}
       </label>
-      {children}
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    </div>
+  );
+}
+
+function TemplateRow({
+  template,
+  agents,
+  onEdit,
+  onDelete,
+}: {
+  template: TaskTemplate;
+  agents: Agent[];
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
+  const assignedAgent = agents.find((a) => a.id === template.assigned_agent_id);
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 8,
+        padding: "8px 10px",
+        border: "1px solid var(--border-default)",
+        borderRadius: 4,
+        background: "var(--bg-base)",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 2 }}>
+          {template.title}
+        </div>
+        <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {template.description.split("\n")[0]}
+        </div>
+        {assignedAgent && (
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", marginTop: 2 }}>
+            Agent: {assignedAgent.name}
+          </div>
+        )}
+      </div>
+      {(onEdit || onDelete) && (
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          {onEdit && (
+            <button
+              className="btn btn-ghost"
+              onClick={onEdit}
+              title="Edit"
+              style={{ padding: "2px 6px" }}
+            >
+              <Pencil size={12} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              className="btn btn-ghost"
+              onClick={onDelete}
+              title="Delete"
+              style={{ padding: "2px 6px", color: "var(--text-error)" }}
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TemplateEditor({
+  initial,
+  agents,
+  onSave,
+  onCancel,
+}: {
+  initial?: Omit<TaskTemplate, "id">;
+  agents: Agent[];
+  onSave: (t: Omit<TaskTemplate, "id">) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [assignedAgentId, setAssignedAgentId] = useState<string | null>(initial?.assigned_agent_id ?? null);
+
+  const handleSave = async () => {
+    if (!title.trim()) return;
+    await onSave({ title: title.trim(), description, assigned_agent_id: assignedAgentId });
+  };
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        padding: "10px 12px",
+        border: "1px solid var(--border-default)",
+        borderRadius: 4,
+        background: "var(--bg-base)",
+      }}
+    >
+      <FieldRow label="Title">
+        <input
+          className="input"
+          placeholder="Template title…"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </FieldRow>
+      <FieldRow label="Description">
+        <textarea
+          className="input"
+          placeholder="Optional description…"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          style={{ resize: "vertical" }}
+        />
+      </FieldRow>
+      <FieldRow label="Assigned agent">
+        <select
+          className="input"
+          value={assignedAgentId ?? ""}
+          onChange={(e) => setAssignedAgentId(e.target.value || null)}
+        >
+          <option value="">None</option>
+          {agents.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      </FieldRow>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="btn btn-primary" onClick={() => void handleSave()}>
+          <Save size={12} />
+          Save
+        </button>
+        <button className="btn btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

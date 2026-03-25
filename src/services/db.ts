@@ -293,3 +293,13 @@ export async function dbUpdateSession(
   values.push(id);
   await db.execute(`UPDATE sessions SET ${sets.join(", ")} WHERE id = ?`, values);
 }
+
+/** Reset any sessions stuck in "running" state (e.g. after an app crash or restart). */
+export async function dbResetRunningSessions(): Promise<void> {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  await db.execute(
+    "UPDATE sessions SET status = 'completed', updated_at = ? WHERE status = 'running'",
+    [now]
+  );
+}

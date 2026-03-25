@@ -1,12 +1,15 @@
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { Plus } from "lucide-react";
 import { useTasksStore, Task } from "../../store/tasks";
 import { useAgentsStore } from "../../store/agents";
 import { dbCreateTask, dbListTasks } from "../../services/db";
 import { useWorkspaceStore } from "../../store/workspace";
+import { useTemplatesStore } from "../../store/templates";
 import { focusPanel } from "../../services/layoutEvents";
 import { TaskRunStateDot, getTaskRunState } from "../../components/TaskRunState";
 import { updateTaskStatusWithActivity } from "../../services/taskActivity";
+import TaskTemplateSuggestions from "../../components/TaskTemplateSuggestions";
+import type { TaskTemplate } from "../../registries/tasks.registry";
 
 const STATUS_ORDER = ["icebox", "improving", "planned", "in_progress", "done", "blocked"] as const;
 
@@ -16,6 +19,10 @@ export default function TaskBoard() {
   const { activeTaskId, setActiveTaskId, projectPath } = useWorkspaceStore();
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null);
+  const allTemplates = useTemplatesStore((s) => s.allTemplates)();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (projectPath) dbListTasks(projectPath).then(setTasks).catch(console.error);
@@ -25,15 +32,28 @@ export default function TaskBoard() {
     if (!newTitle.trim()) return;
     try {
       if (!projectPath) return;
-      const task = await dbCreateTask(newTitle.trim(), projectPath);
+      const task = await dbCreateTask(
+        newTitle.trim(),
+        projectPath,
+        selectedTemplate?.description ?? "",
+        selectedTemplate?.assigned_agent_id ?? null
+      );
       upsertTask(task);
       setNewTitle("");
       setCreating(false);
+      setSuggestionIndex(-1);
+      setSelectedTemplate(null);
       setActiveTaskId(task.id);
       focusPanel("task-detail");
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleTemplateSelect = (template: TaskTemplate) => {
+    setNewTitle(template.title);
+    setSelectedTemplate(template);
+    setSuggestionIndex(-1);
   };
 
   // ⚡ Bolt Optimization: Stabilize callbacks to prevent all TaskRow items
@@ -65,19 +85,52 @@ export default function TaskBoard() {
 
       {creating && (
         <div style={{ padding: "8px", borderBottom: "1px solid var(--border-default)" }}>
-          <input
-            autoFocus
-            className="input"
-            placeholder="Task title…"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreate();
-              if (e.key === "Escape") setCreating(false);
-            }}
-          />
+          <div>
+            <input
+              ref={inputRef}
+              autoFocus
+              className="input"
+              placeholder="Task title…"
+              value={newTitle}
+              onChange={(e) => {
+                setNewTitle(e.target.value);
+                setSuggestionIndex(-1);
+              }}
+              onKeyDown={(e) => {
+                const filtered = allTemplates.filter((t) =>
+                  t.title.toLowerCase().includes(newTitle.toLowerCase())
+                );
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setSuggestionIndex((i) => Math.min(i + 1, filtered.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSuggestionIndex((i) => Math.max(i - 1, 0));
+                } else if (e.key === "Enter") {
+                  if (suggestionIndex >= 0 && filtered[suggestionIndex]) {
+                    handleTemplateSelect(filtered[suggestionIndex]);
+                  } else {
+                    void handleCreate();
+                  }
+                } else if (e.key === "Escape") {
+                  if (suggestionIndex >= 0) {
+                    setSuggestionIndex(-1);
+                  } else {
+                    setCreating(false);
+                  }
+                }
+              }}
+            />
+            <TaskTemplateSuggestions
+              query={newTitle}
+              templates={allTemplates}
+              selectedIndex={suggestionIndex}
+              onSelect={handleTemplateSelect}
+              anchorRef={inputRef}
+            />
+          </div>
           <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-            <button className="btn btn-primary" onClick={handleCreate} style={{ flex: 1 }}>
+            <button className="btn btn-primary" onClick={() => void handleCreate()} style={{ flex: 1 }}>
               Create
             </button>
             <button className="btn btn-ghost" onClick={() => setCreating(false)} style={{ flex: 1 }}>

@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Plus } from "lucide-react";
 import type { Task, TaskStatus } from "../../store/tasks";
 import type { Agent } from "../../store/agents";
 import KanbanCard from "./KanbanCard";
 import type { TaskRunState } from "../../components/TaskRunState";
+import { useTemplatesStore } from "../../store/templates";
+import TaskTemplateSuggestions from "../../components/TaskTemplateSuggestions";
+import type { TaskTemplate } from "../../registries/tasks.registry";
 
 interface KanbanColumnProps {
   title: string;
@@ -13,7 +16,7 @@ interface KanbanColumnProps {
   activeTaskId: string | null;
   taskRunStates: Record<string, TaskRunState>;
   onTaskClick: (taskId: string) => void;
-  onAddTask: (title: string, status: TaskStatus) => void;
+  onAddTask: (title: string, status: TaskStatus, template?: TaskTemplate) => void;
 }
 
 export default function KanbanColumn({
@@ -28,14 +31,26 @@ export default function KanbanColumn({
 }: KanbanColumnProps) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null);
+  const allTemplates = useTemplatesStore((s) => s.allTemplates)();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleAdd = () => {
     const trimmed = draft.trim();
     if (trimmed) {
-      onAddTask(trimmed, status);
+      onAddTask(trimmed, status, selectedTemplate ?? undefined);
     }
     setDraft("");
     setAdding(false);
+    setSuggestionIndex(-1);
+    setSelectedTemplate(null);
+  };
+
+  const handleTemplateSelect = (template: TaskTemplate) => {
+    setDraft(template.title);
+    setSelectedTemplate(template);
+    setSuggestionIndex(-1);
   };
 
   return (
@@ -124,21 +139,49 @@ export default function KanbanColumn({
         {adding && (
           <div style={{ marginTop: 4 }}>
             <input
+              ref={inputRef}
               className="input"
               autoFocus
               placeholder="Task title…"
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                setSuggestionIndex(-1);
+              }}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleAdd();
-                if (e.key === "Escape") {
-                  setDraft("");
-                  setAdding(false);
+                const filtered = allTemplates.filter((t) =>
+                  t.title.toLowerCase().includes(draft.toLowerCase())
+                );
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setSuggestionIndex((i) => Math.min(i + 1, filtered.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSuggestionIndex((i) => Math.max(i - 1, 0));
+                } else if (e.key === "Enter") {
+                  if (suggestionIndex >= 0 && filtered[suggestionIndex]) {
+                    handleTemplateSelect(filtered[suggestionIndex]);
+                  } else {
+                    handleAdd();
+                  }
+                } else if (e.key === "Escape") {
+                  if (suggestionIndex >= 0) {
+                    setSuggestionIndex(-1);
+                  } else {
+                    setDraft("");
+                    setAdding(false);
+                  }
                 }
               }}
-              onBlur={handleAdd}
               style={{ marginBottom: 4 }}
+            />
+            <TaskTemplateSuggestions
+              query={draft}
+              templates={allTemplates}
+              selectedIndex={suggestionIndex}
+              onSelect={handleTemplateSelect}
+              anchorRef={inputRef}
             />
           </div>
         )}

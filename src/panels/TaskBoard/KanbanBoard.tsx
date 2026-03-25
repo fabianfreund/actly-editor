@@ -6,6 +6,7 @@ import { dbListTasks, dbCreateTask, dbListAgents, dbListSessions } from "../../s
 import { useMemo, useCallback } from "react";
 import KanbanColumn from "./KanbanColumn";
 import { getTaskRunState } from "../../components/TaskRunState";
+import type { TaskTemplate } from "../../registries/tasks.registry";
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: "icebox", label: "Icebox" },
@@ -34,10 +35,15 @@ export default function KanbanBoard() {
     setActiveTaskId(taskId);
   }, [setActiveTaskId]);
 
-  const handleAddTask = useCallback(async (title: string, status: TaskStatus) => {
+  const handleAddTask = useCallback(async (title: string, status: TaskStatus, template?: TaskTemplate) => {
     try {
       if (!projectPath) return;
-      const task = await dbCreateTask(title, projectPath);
+      const task = await dbCreateTask(
+        title,
+        projectPath,
+        template?.description ?? "",
+        template?.assigned_agent_id ?? null
+      );
       // Override status if not the default
       const finalTask = status === "planned" ? task : { ...task, status };
       upsertTask(finalTask);

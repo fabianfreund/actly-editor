@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Paperclip, Link, X, Plus, MessageSquare, GitCommit, AlertCircle, Clock, ArrowRight, RotateCcw, Trash2, Play } from "lucide-react";
+import { Paperclip, Link, X, Plus, AlertCircle, Clock, ArrowRight, RotateCcw, Trash2, Play, Terminal, FileText, Zap } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspaceStore } from "../../store/workspace";
 import { useTasksStore, Task, TaskEvent } from "../../store/tasks";
@@ -71,10 +71,6 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "var(--text-error)",
 };
 
-const EVENT_ICONS: Record<string, React.ReactNode> = {
-  state_change: <GitCommit size={13} />,
-};
-
 // ─── Section heading ──────────────────────────────────────────────────────────
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -105,7 +101,7 @@ export default function TaskDetail() {
   const [descDraft, setDescDraft] = useState(task?.description ?? "");
   const [editingTitle, setEditingTitle] = useState(false);
   const [comment, setComment] = useState("");
-  const [pendingAssignedAgentId, setPendingAssignedAgentId] = useState<string | null>(null);
+  const [dismissedStartPrompt, setDismissedStartPrompt] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [newRef, setNewRef] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -118,9 +114,9 @@ export default function TaskDetail() {
     setTitleDraft(task?.title ?? "");
     setDescDraft(task?.description ?? "");
     setEditingTitle(false);
-    setPendingAssignedAgentId(null);
+    setDismissedStartPrompt(false);
     setMentionQuery(null);
-  }, [activeTaskId, task?.title, task?.description]);
+  }, [activeTaskId]);
 
   useEffect(() => {
     if (activeTaskId) {
@@ -192,7 +188,7 @@ export default function TaskDetail() {
 
   const handleAgentChange = async (agentId: string) => {
     await saveField({ assigned_agent_id: agentId || null });
-    setPendingAssignedAgentId(agentId || null);
+    setDismissedStartPrompt(false);
   };
 
   // ── refs ────────────────────────────────────────────────────────────────────
@@ -297,10 +293,10 @@ export default function TaskDetail() {
   };
 
   const handleStartAssignedAgent = async () => {
-    if (!pendingAssignedAgentId) return;
-    const agent = useAgentsStore.getState().agents.find((a) => a.id === pendingAssignedAgentId) ?? null;
+    if (!task?.assigned_agent_id) return;
+    const agent = useAgentsStore.getState().agents.find((a) => a.id === task.assigned_agent_id) ?? null;
     if (!agent) return;
-    setPendingAssignedAgentId(null);
+    setDismissedStartPrompt(true);
     await runTaskWithAgent(agent);
   };
 
@@ -422,7 +418,7 @@ export default function TaskDetail() {
               <option value="">Unassigned</option>
               {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
-            {pendingAssignedAgentId && (
+            {task.assigned_agent_id && runState === "idle" && task.status !== "done" && task.status !== "failed" && !dismissedStartPrompt && (
               <div
                 style={{
                   display: "flex",
@@ -436,13 +432,13 @@ export default function TaskDetail() {
                 }}
               >
                 <span style={{ flex: 1, fontSize: "var(--font-size-xs)", color: "var(--text-secondary)", lineHeight: 1.4 }}>
-                  Start this task with {agents.find((agent) => agent.id === pendingAssignedAgentId)?.name ?? "the assigned agent"} now?
+                  Start this task with {agents.find((agent) => agent.id === task.assigned_agent_id)?.name ?? "the assigned agent"} now?
                 </span>
                 <button className="btn btn-primary" onClick={handleStartAssignedAgent} style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)" }}>
                   <Play size={12} />
                   Start now
                 </button>
-                <button className="btn btn-ghost" onClick={() => setPendingAssignedAgentId(null)} style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)" }}>
+                <button className="btn btn-ghost" onClick={() => setDismissedStartPrompt(true)} style={{ padding: "2px 8px", fontSize: "var(--font-size-xs)" }}>
                   Later
                 </button>
               </div>
@@ -805,20 +801,94 @@ function TimelineEvent({
     );
   }
 
-  // ── Generic fallback (step / approval legacy / etc.) ─────────────────────
-  const icon = EVENT_ICONS[event.type] ?? <Clock size={13} />;
+  // ── state_change: command execution ──────────────────────────────────────
+  if (event.type === "state_change" && event.content.startsWith("Ran ")) {
+    const cmd = event.content.slice(4);
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "4px 10px",
+          borderRadius: 6,
+          background: "var(--bg-elevated)",
+          border: "1px solid var(--border-default)",
+          margin: "2px 0",
+        }}
+      >
+        <Terminal size={11} style={{ color: "var(--accent)", flexShrink: 0, opacity: 0.6 }} />
+        <code
+          style={{
+            fontSize: "var(--font-size-xs)",
+            color: "var(--text-secondary)",
+            fontFamily: "var(--font-mono)",
+            flex: 1,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={cmd}
+        >
+          {cmd}
+        </code>
+      </div>
+    );
+  }
+
+  // ── state_change: file update ─────────────────────────────────────────────
+  if (event.type === "state_change" && event.content.startsWith("Updated ")) {
+    const filePath = event.content.slice(8);
+    const short = filePath.split("/").slice(-2).join("/");
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "4px 10px",
+          borderRadius: 6,
+          background: "var(--bg-elevated)",
+          border: "1px solid var(--border-default)",
+          margin: "2px 0",
+        }}
+      >
+        <FileText size={11} style={{ color: "var(--accent)", flexShrink: 0, opacity: 0.6 }} />
+        <code
+          style={{
+            fontSize: "var(--font-size-xs)",
+            color: "var(--text-secondary)",
+            fontFamily: "var(--font-mono)",
+            flex: 1,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={filePath}
+        >
+          {filePath.length > short.length ? `…/${short}` : filePath}
+        </code>
+      </div>
+    );
+  }
+
+  // ── state_change: agent started ───────────────────────────────────────────
+  if (event.type === "state_change" && event.content.endsWith(" started")) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", color: "var(--text-muted)", fontSize: "var(--font-size-xs)" }}>
+        <Zap size={11} style={{ color: "var(--accent)", opacity: 0.6 }} />
+        <span>{event.content}</span>
+      </div>
+    );
+  }
+
+  // ── Generic fallback ──────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", gap: 8, padding: "5px 0", alignItems: "flex-start" }}>
-      <div style={{ width: 20, height: 20, borderRadius: "50%", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-muted)", marginTop: 2 }}>
-        {icon}
+    <div style={{ display: "flex", gap: 8, padding: "4px 0", alignItems: "flex-start" }}>
+      <div style={{ width: 18, height: 18, borderRadius: "50%", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--text-muted)", marginTop: 1 }}>
+        <Clock size={11} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 1 }}>
-          <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--text-muted)", textTransform: "capitalize" }}>{event.actor}</span>
-          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
-            {new Date(event.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-          </span>
-        </div>
         <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-secondary)", lineHeight: 1.5, wordBreak: "break-word" }}>
           {event.content}
         </div>

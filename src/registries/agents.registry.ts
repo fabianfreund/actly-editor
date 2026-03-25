@@ -68,12 +68,19 @@ export const AGENT_TYPES: AgentTypeDef[] = [
       "Run tests after changes. Keep commits small and focused.",
     workflow: {
       startStatus: "in_progress",
-      completionStatus: "done",
-      canRewriteTask: false,
+      // null = let the agent decide via <task_update> status field
+      completionStatus: null,
+      canRewriteTask: true,
+      taskUpdateFormat: "json_block",
       executionPrompt:
         "You are implementing the task. Use the current task title and notes as the source of truth, make the requested changes, " +
         "and finish by summarizing what changed and any verification you ran. " +
-        "Throughout your work, you may emit one or more <actly_activity>{...}</actly_activity> JSON blocks " +
+        "At the end of your reply, include exactly one <task_update>{...}</task_update> JSON block to set the outcome. " +
+        "Use {\"status\":\"done\"} when the task is fully implemented and verified. " +
+        "Use {\"status\":\"in_progress\"} if work is only partially complete or you were blocked. " +
+        "You may also include \"title\" or \"description\" fields in the same block to update the task notes with a completion summary. " +
+        "Keep the JSON valid and omit fields you do not want to change. " +
+        "Throughout your work, you may also emit one or more <actly_activity>{...}</actly_activity> JSON blocks " +
         "to report progress, ask the user a question, or summarise findings. Each block must match this shape: " +
         "{\"type\":\"activity\"|\"question\"|\"summary\",\"text\":\"main message\"," +
         "\"items\":[{\"label\":\"string\",\"detail\":\"optional string\"}],\"tag_user\":false}. " +
@@ -92,7 +99,7 @@ export const AGENT_TYPES: AgentTypeDef[] = [
       "and configuration for AI coding agents. Be concise, omit placeholders, and start immediately.",
     workflow: {
       startStatus: null,
-      completionStatus: null,
+      completionStatus: "done",
       canRewriteTask: false,
       executionPrompt:
         "You are initializing an Actly project workspace. Analyze this repository carefully, then:\n\n" +

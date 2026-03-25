@@ -25,6 +25,28 @@ export const TASK_TEMPLATES: TaskTemplate[] = [
     assigned_agent_id: "agent-initializer",
     initial_status: "in_progress",
   },
+  {
+    id: "reinitialize-project",
+    title: "Reinitialize project",
+    description:
+      "Re-analyze this repository and refresh the .actly workspace:\n" +
+      "• Update AGENTS.md with current project overview, key files, and coding guidelines\n" +
+      "• Update docs/architecture.md with latest tech stack and architectural decisions\n" +
+      "• Refresh actions.json with current available scripts",
+    assigned_agent_id: "agent-initializer",
+    initial_status: "in_progress",
+  },
+  {
+    id: "refactor",
+    title: "Refactor",
+    description:
+      "Identify and clean up code quality issues in the codebase:\n" +
+      "• Extract duplicated logic into shared utilities\n" +
+      "• Improve naming and readability\n" +
+      "• Simplify overly complex functions\n" +
+      "• Ensure consistent patterns across modules",
+    assigned_agent_id: "agent-builder",
+  },
 ];
 
 export function getTaskTemplate(id: string): TaskTemplate | undefined {

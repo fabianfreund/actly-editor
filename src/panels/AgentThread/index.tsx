@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { Play, Terminal, FileText } from "lucide-react";
 import { ApprovalCard, type ApprovalState } from "../../components/ApprovalCard";
 import { useWorkspaceStore } from "../../store/workspace";
 import { useTasksStore } from "../../store/tasks";
@@ -15,7 +15,6 @@ export default function AgentThread() {
   const { tasks, updateEvent } = useTasksStore();
   const { agents, sessions, events, setAgents, setSessions } = useAgentsStore();
   const [message, setMessage] = useState("");
-  const [selectedAgentId, setSelectedAgentId] = useState<string>("agent-builder");
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [pendingApprovalEventId, setPendingApprovalEventId] = useState<string | null>(null);
   const eventsEndRef = useRef<HTMLDivElement>(null);
@@ -25,7 +24,15 @@ export default function AgentThread() {
     .filter((s) => s.task_id === activeTaskId)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const activeSession = taskSessions[0];
-  const selectedAgent = agents.find((agent) => agent.id === activeSession?.agent_id);
+
+  // Determine which agent to show — prefer the one that ran the active session,
+  // fall back to the task's assigned agent, then the first builder/agent available.
+  const activeAgent = activeSession
+    ? agents.find((a) => a.id === activeSession.agent_id)
+    : task?.assigned_agent_id
+    ? agents.find((a) => a.id === task.assigned_agent_id)
+    : agents.find((a) => a.role === "builder") ?? agents[0];
+
   const sessionEvents = activeSession ? (events[activeSession.id] ?? []) : [];
   const runState = task ? getTaskRunState(task, sessions) : null;
   const displayEvents = buildDisplayEvents(sessionEvents);
@@ -45,16 +52,13 @@ export default function AgentThread() {
   }, [sessionEvents.length]);
 
   const handleStart = async () => {
-    if (!activeTaskId || !projectPath || !task) return;
-    const agent = agents.find((a) => a.id === selectedAgentId);
-    if (!agent) return;
-
+    if (!activeTaskId || !projectPath || !task || !activeAgent) return;
     try {
       await startAgent({
         taskId: activeTaskId,
-        agentId: selectedAgentId,
+        agentId: activeAgent.id,
         task,
-        agent,
+        agent: activeAgent,
         projectPath,
         codexPath,
         onSessionCreated: (session) => {
@@ -81,9 +85,7 @@ export default function AgentThread() {
         session.id === activeSession.id ? { ...session, status: "running" } : session
       )
     );
-    await client.sendMessage(nextMessage, {
-      cwd: projectPath ?? undefined,
-    });
+    await client.sendMessage(nextMessage, { cwd: projectPath ?? undefined });
   };
 
   const handleApprovalDecision = async (requestId: string, decision: ApprovalDecision) => {
@@ -103,7 +105,6 @@ export default function AgentThread() {
       payload: { request_id: requestId, decision },
       received_at: new Date().toISOString(),
     });
-    // Update the existing pending approval task event instead of creating a second one
     if (pendingApprovalEventId) {
       const resolved: ApprovalState =
         decision === "accept" ? "accepted" :
@@ -124,13 +125,7 @@ export default function AgentThread() {
     return (
       <div
         className="panel-full"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "var(--text-muted)",
-          fontSize: "var(--font-size-sm)",
-        }}
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}
       >
         Select a task to start an agent
       </div>
@@ -139,26 +134,59 @@ export default function AgentThread() {
 
   return (
     <div className="panel-full">
+      <style>{`
+        @keyframes thinking-pulse {
+          0%, 60%, 100% { opacity: 0.2; transform: scale(0.8); }
+          30% { opacity: 1; transform: scale(1); }
+        }
+        .thinking-dot {
+          display: inline-block;
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: var(--accent);
+          animation: thinking-pulse 1.4s ease-in-out infinite;
+        }
+        .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+        .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes cursor-blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+        .stream-cursor {
+          display: inline-block;
+          width: 2px;
+          height: 0.9em;
+          background: var(--accent);
+          margin-left: 2px;
+          vertical-align: text-bottom;
+          animation: cursor-blink 0.9s step-end infinite;
+        }
+        @keyframes step-in {
+          from { opacity: 0; transform: translateX(-4px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        .step-bubble { animation: step-in 0.15s ease-out; }
+      `}</style>
+
       <div className="panel-header">
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-          <select
-            value={selectedAgentId}
-            onChange={(e) => setSelectedAgentId(e.target.value)}
-            style={{
-              background: "var(--bg-elevated)",
-              border: "1px solid var(--border-default)",
-              borderRadius: 3,
-              color: "var(--text-secondary)",
-              fontSize: "var(--font-size-xs)",
-              padding: "2px 6px",
-            }}
-          >
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Show the active or assigned agent — no dropdown */}
+          {activeAgent && (
+            <div
+              style={{
+                fontSize: "var(--font-size-xs)",
+                color: "var(--text-secondary)",
+                background: "var(--bg-elevated)",
+                border: "1px solid var(--border-default)",
+                borderRadius: 6,
+                padding: "3px 9px",
+                fontWeight: 500,
+              }}
+            >
+              {activeAgent.name}
+            </div>
+          )}
 
           {!activeSession ? (
             <button className="btn btn-primary" onClick={handleStart} style={{ padding: "2px 8px" }}>
@@ -172,16 +200,9 @@ export default function AgentThread() {
       </div>
 
       {/* Event stream */}
-      <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
         {sessionEvents.length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              color: "var(--text-muted)",
-              fontSize: "var(--font-size-sm)",
-              padding: 24,
-            }}
-          >
+          <div style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "var(--font-size-sm)", padding: 24 }}>
             Start an agent to see activity
           </div>
         ) : (
@@ -199,15 +220,7 @@ export default function AgentThread() {
 
       {/* Input */}
       {activeSession && (
-        <div
-          style={{
-            padding: "8px 12px",
-            borderTop: "1px solid var(--border-default)",
-            display: "flex",
-            gap: 6,
-            flexShrink: 0,
-          }}
-        >
+        <div style={{ padding: "8px 12px", borderTop: "1px solid var(--border-default)", display: "flex", gap: 6, flexShrink: 0 }}>
           <input
             className="input"
             placeholder="Message the agent…"
@@ -229,69 +242,55 @@ export default function AgentThread() {
   );
 }
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type DisplayEvent = {
   id: string;
-  kind: "user" | "agent" | "step" | "error" | "system" | "approval";
+  kind: "user" | "agent" | "step" | "thinking" | "system" | "error" | "approval";
   content: string;
+  stepType?: "command" | "file";
+  isStreaming?: boolean;
   request?: ApprovalRequest;
   approvalState?: "pending" | "approved" | "alwaysApproved" | "dismissed";
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function shortenPath(path: string): string {
+  const parts = path.replace(/\\/g, "/").split("/");
+  return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : path;
+}
+
 function formatApprovalDescription(request: ApprovalRequest): string {
-  if (request.description.trim()) {
-    return request.description;
-  }
-  if (request.command?.length) {
-    return "The agent wants to run a command that needs your approval.";
-  }
-  if (request.file_paths?.length) {
-    return "The agent wants to make file changes that need your approval.";
-  }
-  if (request.grant_root?.trim()) {
-    return `The agent wants permission to work inside ${request.grant_root}.`;
-  }
-  if (request.reason?.trim()) {
-    return request.reason;
-  }
-  if (request.method === "item/commandExecution/requestApproval") {
-    return "The agent wants to run a command that needs your approval.";
-  }
-  if (request.method === "item/fileChange/requestApproval") {
-    return "The agent wants to make file changes that need your approval.";
-  }
+  if (request.description.trim()) return request.description;
+  if (request.command?.length) return "The agent wants to run a command that needs your approval.";
+  if (request.file_paths?.length) return "The agent wants to make file changes that need your approval.";
+  if (request.grant_root?.trim()) return `The agent wants permission to work inside ${request.grant_root}.`;
+  if (request.reason?.trim()) return request.reason;
+  if (request.method === "item/commandExecution/requestApproval") return "The agent wants to run a command that needs your approval.";
+  if (request.method === "item/fileChange/requestApproval") return "The agent wants to make file changes that need your approval.";
   return "The agent needs your approval to continue.";
 }
 
 function getApprovalMeta(request: ApprovalRequest): { label: string; value: string }[] {
   const meta: { label: string; value: string }[] = [];
-
-  if (request.reason?.trim()) {
-    meta.push({ label: "Reason", value: request.reason.trim() });
-  }
-  if (request.grant_root?.trim()) {
-    meta.push({ label: "Scope", value: request.grant_root.trim() });
-  }
+  if (request.reason?.trim()) meta.push({ label: "Reason", value: request.reason.trim() });
+  if (request.grant_root?.trim()) meta.push({ label: "Scope", value: request.grant_root.trim() });
   if (!request.command?.length && !request.file_paths?.length && request.item_id?.trim()) {
     meta.push({ label: "Request", value: "The agent is waiting on approval for this action." });
   }
-
   return meta;
 }
+
+// ─── Build display events from raw session events ─────────────────────────────
 
 function buildDisplayEvents(events: { id: string; type: string; payload: unknown }[]): DisplayEvent[] {
   const display: DisplayEvent[] = [];
   const approvalIndexes = new Map<string, number>();
+  let turnActive = false;
 
   const pushOrMergeAgent = (id: string, content: string) => {
     if (!content) return;
-    if (!content.trim()) {
-      const last = display[display.length - 1];
-      if (last?.kind === "agent") {
-        last.content += content;
-      }
-      return;
-    }
-
     const last = display[display.length - 1];
     if (last?.kind === "agent") {
       last.content += content;
@@ -303,9 +302,15 @@ function buildDisplayEvents(events: { id: string; type: string; payload: unknown
   for (const event of events) {
     const payload = event.payload as Record<string, unknown>;
 
+    if (event.type === "turn.started") {
+      turnActive = true;
+      continue;
+    }
+
     if (event.type === "item.agent_message" && payload.item) {
       const item = payload.item as Record<string, unknown>;
-      pushOrMergeAgent(event.id, String(item.content ?? ""));
+      const content = String(item.content ?? "");
+      if (content) pushOrMergeAgent(event.id, content);
       continue;
     }
 
@@ -318,27 +323,25 @@ function buildDisplayEvents(events: { id: string; type: string; payload: unknown
       continue;
     }
 
-    if (event.type === "turn.started") {
-      display.push({ id: event.id, kind: "system", content: "Thinking…" });
-      continue;
-    }
-
     if (event.type === "item.command_exec" && payload.item) {
       const item = payload.item as Record<string, unknown>;
       const command = (item.command as string[] | undefined)?.join(" ");
-      if (command) display.push({ id: event.id, kind: "step", content: `Ran ${command}` });
+      if (command) display.push({ id: event.id, kind: "step", content: command, stepType: "command" });
       continue;
     }
 
     if (event.type === "item.file_change" && payload.item) {
       const item = payload.item as Record<string, unknown>;
       const path = item.path as string | undefined;
-      if (path) display.push({ id: event.id, kind: "step", content: `Updated ${path}` });
+      if (path) display.push({ id: event.id, kind: "step", content: path, stepType: "file" });
       continue;
     }
 
     if (event.type === "turn.completed") {
-      display.push({ id: event.id, kind: "system", content: "Done." });
+      turnActive = false;
+      // Clear any streaming flag on the last agent message
+      const lastAgent = [...display].reverse().find((e) => e.kind === "agent");
+      if (lastAgent) lastAgent.isStreaming = false;
       continue;
     }
 
@@ -363,24 +366,34 @@ function buildDisplayEvents(events: { id: string; type: string; payload: unknown
         display[approvalIndex] = {
           ...display[approvalIndex],
           approvalState:
-            decision === "accept"
-              ? "approved"
-              : decision === "acceptForSession"
-              ? "alwaysApproved"
-              : "dismissed",
+            decision === "accept" ? "approved" :
+            decision === "acceptForSession" ? "alwaysApproved" : "dismissed",
         };
       }
       continue;
     }
 
     if (event.type === "turn.failed" || event.type === "error") {
-      const message = String(payload.message ?? "Something went wrong");
-      display.push({ id: event.id, kind: "error", content: message });
+      turnActive = false;
+      const msg = String(payload.message ?? "Something went wrong");
+      display.push({ id: event.id, kind: "error", content: msg });
+    }
+  }
+
+  // While the turn is still active, show either a streaming cursor or thinking dots
+  if (turnActive) {
+    const last = display[display.length - 1];
+    if (last?.kind === "agent") {
+      last.isStreaming = true;
+    } else {
+      display.push({ id: "live-thinking", kind: "thinking", content: "" });
     }
   }
 
   return display;
 }
+
+// ─── EventBubble ─────────────────────────────────────────────────────────────
 
 function EventBubble({
   event,
@@ -391,21 +404,95 @@ function EventBubble({
   rootPath?: string | null;
   onApprovalDecision?: (requestId: string, decision: ApprovalDecision) => void;
 }) {
-  const isUser = event.kind === "user";
-  const isStep = event.kind === "step";
-  const isError = event.kind === "error";
-  const isSystem = event.kind === "system";
-  const isApproval = event.kind === "approval";
-  const content = event.kind === "agent" ? event.content.trim() : event.content;
+  // Animated thinking dots
+  if (event.kind === "thinking") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px" }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          <span className="thinking-dot" />
+          <span className="thinking-dot" />
+          <span className="thinking-dot" />
+        </div>
+        <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>Working…</span>
+      </div>
+    );
+  }
 
-  if (isApproval && event.request && onApprovalDecision) {
+  // Step bubble — command or file change
+  if (event.kind === "step") {
+    const isCommand = event.stepType === "command";
+    const Icon = isCommand ? Terminal : FileText;
+    const label = isCommand ? event.content : shortenPath(event.content);
+    return (
+      <div
+        className="step-bubble"
+        title={event.content}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "5px 10px",
+          borderRadius: 6,
+          background: "var(--bg-elevated)",
+          border: "1px solid var(--border-default)",
+        }}
+      >
+        <Icon size={11} style={{ color: "var(--accent)", flexShrink: 0, opacity: 0.6 }} />
+        <code
+          style={{
+            fontSize: "var(--font-size-xs)",
+            color: "var(--text-secondary)",
+            fontFamily: "var(--font-mono)",
+            flex: 1,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}
+        </code>
+      </div>
+    );
+  }
+
+  // System message (generic)
+  if (event.kind === "system") {
+    return (
+      <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", padding: "4px 2px" }}>
+        {event.content}
+      </div>
+    );
+  }
+
+  // Error
+  if (event.kind === "error") {
+    return (
+      <div
+        style={{
+          padding: "10px 12px",
+          borderRadius: 8,
+          background: "rgba(244,135,113,0.08)",
+          border: "1px solid rgba(244,135,113,0.2)",
+          fontSize: "var(--font-size-sm)",
+          color: "var(--text-error)",
+          lineHeight: 1.5,
+          wordBreak: "break-word",
+        }}
+      >
+        {event.content}
+      </div>
+    );
+  }
+
+  // Approval card
+  if (event.kind === "approval" && event.request && onApprovalDecision) {
     const approvalState = event.approvalState ?? "pending";
     const stateMap: Record<string, ApprovalState> = {
       pending: "pending", approved: "accepted", alwaysApproved: "alwaysApproved", dismissed: "declined",
     };
     return (
       <ApprovalCard
-        description={content}
+        description={event.content}
         command={event.request.command}
         file_paths={event.request.file_paths}
         meta={getApprovalMeta(event.request)}
@@ -417,40 +504,49 @@ function EventBubble({
     );
   }
 
+  // User message
+  if (event.kind === "user") {
+    return (
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div
+          style={{
+            padding: "8px 12px",
+            borderRadius: "10px 10px 2px 10px",
+            background: "rgba(0,120,212,0.12)",
+            border: "1px solid rgba(0,120,212,0.18)",
+            fontSize: "var(--font-size-sm)",
+            color: "var(--text-primary)",
+            lineHeight: 1.5,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maxWidth: "85%",
+          }}
+        >
+          {event.content}
+        </div>
+      </div>
+    );
+  }
+
+  // Agent message (default)
+  const content = event.content.trim();
   return (
     <div
       style={{
-        padding: isSystem ? "4px 2px" : "10px 12px",
-        borderRadius: isSystem ? 0 : 10,
-        background: isUser
-          ? "transparent"
-          : isStep
-          ? "var(--bg-elevated)"
-          : isError
-          ? "rgba(244,135,113,0.08)"
-          : isSystem
-          ? "transparent"
-          : "var(--bg-surface)",
-        border: isSystem ? "none" : "1px solid transparent",
-        borderLeft: isStep ? "2px solid var(--accent)" : isError ? "1px solid rgba(244,135,113,0.2)" : "1px solid rgba(255,255,255,0.02)",
-        fontSize: isSystem ? "var(--font-size-xs)" : "var(--font-size-sm)",
-        color: isError
-          ? "var(--text-error)"
-          : isUser
-          ? "var(--text-muted)"
-          : isSystem
-          ? "var(--text-muted)"
-          : "var(--text-primary)",
-        fontFamily: "var(--font-sans)",
+        padding: "10px 14px",
+        borderRadius: 10,
+        background: "var(--bg-surface)",
+        border: "1px solid rgba(255,255,255,0.04)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
+        fontSize: "var(--font-size-sm)",
+        color: "var(--text-primary)",
+        lineHeight: 1.6,
         whiteSpace: "pre-wrap",
         wordBreak: "break-word",
-        fontStyle: isUser ? "italic" : "normal",
-        lineHeight: 1.6,
-        maxWidth: isSystem ? "100%" : isUser ? 760 : 820,
-        boxShadow: isSystem ? "none" : "inset 0 1px 0 rgba(255,255,255,0.015)",
       }}
     >
       <FormattedText text={content} rootPath={rootPath} />
+      {event.isStreaming && <span className="stream-cursor" />}
     </div>
   );
 }

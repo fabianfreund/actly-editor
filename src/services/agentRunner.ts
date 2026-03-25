@@ -8,6 +8,7 @@ import { useAgentsStore } from "../store/agents";
 import { useTasksStore } from "../store/tasks";
 import { useWorkspaceStore } from "../store/workspace";
 import { useNotificationsStore } from "../store/notifications";
+import { useActionsStore } from "../store/actions";
 import { codexCommands } from "./tauri";
 import { getCodexClient, type ApprovalRequest } from "./codex";
 import { dbCreateSession, dbUpdateSession, dbAddTaskEvent, dbUpdateTask } from "./db";
@@ -35,6 +36,9 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
   const workflow = getAgentWorkflow(agent);
   const runtimeModel = agent.model?.trim() || getAgentDefaultModel(agent) || "gpt-5.4-mini";
   const runtimeSystemPrompt = agent.system_prompt?.trim() || getAgentDefaultSystemPrompt(agent);
+
+  const { yoloMode } = useWorkspaceStore.getState();
+  const effectiveApprovalMode = yoloMode ? "never" : agent.approval_mode;
 
   const workspaceId = task.workspace_id ?? projectPath;
   const session = await dbCreateSession(taskId, agentId, workspaceId);
@@ -128,11 +132,29 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
 
     if (event.type === "turn.started") {
       await updateSessionStatus("running");
+      const startEvent = await dbAddTaskEvent(taskId, workspaceId, "state_change", `${agent.name} started`, agent.name).catch(() => null);
+      if (startEvent) addTaskEvent(startEvent);
     }
 
     if (event.type === "item.agent_message" && event.item) {
       const content = (event.item as { content?: string }).content ?? JSON.stringify(event.item);
       latestAgentMessage += content;
+
+      // Emit any completed <actly_activity> blocks immediately as they arrive
+      const { cleanMessage, activities } = extractActlyActivities(latestAgentMessage);
+      if (activities.length > 0) {
+        latestAgentMessage = cleanMessage; // strip processed tags to avoid double-write at turn.completed
+        for (const activity of activities) {
+          const isUserFacing = activity.type === "question" || activity.tag_user === true;
+          const eventType = isUserFacing ? "agent_question" : "agent_message";
+          const activityEvent = await dbAddTaskEvent(
+            taskId, workspaceId, eventType,
+            activity.text, agent.name,
+            JSON.stringify({ type: activity.type, text: activity.text, items: activity.items ?? [] })
+          ).catch(() => null);
+          if (activityEvent) addTaskEvent(activityEvent);
+        }
+      }
     }
 
     if (event.type === "item.command_exec" && event.item) {
@@ -153,9 +175,25 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
     }
 
     if (event.type === "approval_request") {
-      await updateSessionStatus("paused");
       const req = event as ApprovalRequest;
       const summary = req.description?.trim() || "Approval required";
+      const { yoloMode } = useWorkspaceStore.getState();
+
+      if (yoloMode) {
+        const approvalEvent = await dbAddTaskEvent(
+          taskId,
+          workspaceId,
+          "approval",
+          `Auto-approved: ${summary}`,
+          agent.name,
+          JSON.stringify({ request_id: req.request_id, status: "accepted", decision: "accept" })
+        ).catch(() => null);
+        if (approvalEvent) addTaskEvent(approvalEvent);
+        client.respondToApproval(req.request_id, "accept");
+        return;
+      }
+
+      await updateSessionStatus("paused");
       const approvalEvent = await dbAddTaskEvent(
         taskId,
         workspaceId,
@@ -186,19 +224,28 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
       const afterTaskUpdate = (parsedTaskUpdate?.cleanMessage ?? latestAgentMessage).trim();
       const { cleanMessage: strippedMessage, activities } = extractActlyActivities(afterTaskUpdate);
       const finalMessage = strippedMessage;
-      if (parsedTaskUpdate && (parsedTaskUpdate.title || parsedTaskUpdate.description)) {
-        await applyTaskUpdate(
-          taskId,
-          {
-            title: parsedTaskUpdate.title ?? currentTask.title,
-            description: parsedTaskUpdate.description ?? currentTask.description,
-          },
-          agent.name,
+      if (parsedTaskUpdate && (parsedTaskUpdate.title || parsedTaskUpdate.description || parsedTaskUpdate.status)) {
+        const statusLabel = parsedTaskUpdate.status
+          ? `Moved to ${parsedTaskUpdate.status.replace(/_/g, " ")}`
+          : null;
+        const contentLabel =
           parsedTaskUpdate.title && parsedTaskUpdate.description
             ? "Refined the task title and notes"
             : parsedTaskUpdate.title
             ? "Updated the task title"
-            : "Updated the task notes"
+            : parsedTaskUpdate.description
+            ? "Updated the task notes"
+            : null;
+        const activityLabel = [contentLabel, statusLabel].filter(Boolean).join(", ");
+        await applyTaskUpdate(
+          taskId,
+          {
+            ...(parsedTaskUpdate.title ? { title: parsedTaskUpdate.title } : {}),
+            ...(parsedTaskUpdate.description ? { description: parsedTaskUpdate.description } : {}),
+            ...(parsedTaskUpdate.status ? { status: parsedTaskUpdate.status as Task["status"] } : {}),
+          },
+          agent.name,
+          activityLabel || "Updated task"
         );
       }
       for (const activity of activities) {
@@ -240,6 +287,8 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
         );
       }
       await updateSessionStatus("completed");
+      // Reload actions from disk in case the agent wrote/updated .actly/actions.json
+      useActionsStore.getState().loadActions(projectPath).catch(() => {});
       onTurnCompleted?.();
       addNotification({
         kind: "turn_completed",
@@ -252,16 +301,28 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
 
     if (event.type === "turn.failed") {
       runHadError = true;
+      const partial = latestAgentMessage.trim();
       latestAgentMessage = "";
+      if (partial) {
+        const partialEvent = await dbAddTaskEvent(taskId, workspaceId, "agent_message", partial, agent.name).catch(() => null);
+        if (partialEvent) addTaskEvent(partialEvent);
+      }
       await updateSessionStatus("failed");
       await markTaskNeedsIntervention((event.message as string | undefined) ?? `${agent.name} needs help to continue.`);
     }
 
     if (event.type === "error") {
       runHadError = true;
+      const errorMsg = (event.message as string | undefined) ?? "Codex connection error";
+      // Save any partial output the agent produced before the connection dropped
+      const partial = latestAgentMessage.trim();
       latestAgentMessage = "";
+      if (partial) {
+        const partialEvent = await dbAddTaskEvent(taskId, workspaceId, "agent_message", partial, agent.name).catch(() => null);
+        if (partialEvent) addTaskEvent(partialEvent);
+      }
       await updateSessionStatus("failed");
-      await markTaskNeedsIntervention((event.message as string | undefined) ?? "Codex connection error");
+      await markTaskNeedsIntervention(errorMsg);
     }
   });
 
@@ -269,7 +330,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
     const threadId = await client.createThread({
       workdir: projectPath,
       model: runtimeModel,
-      approval_mode: agent.approval_mode,
+      approval_mode: effectiveApprovalMode,
     });
 
     await dbUpdateSession(session.id, { codex_thread_id: threadId });
@@ -296,7 +357,7 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
     await client.sendMessage(msg, {
       cwd: projectPath,
       model: runtimeModel,
-      approval_mode: agent.approval_mode,
+      approval_mode: effectiveApprovalMode,
     });
   } catch (error) {
     await updateSessionStatus("failed");
@@ -366,12 +427,20 @@ function extractActlyActivities(message: string): { cleanMessage: string; activi
   return { cleanMessage: cleanMessage.trim(), activities };
 }
 
-function extractTaskUpdate(message: string): { cleanMessage: string; title?: string; description?: string } | null {
+const VALID_TASK_STATUSES = new Set(["icebox", "planned", "todo", "in_progress", "done", "failed"]);
+
+function extractTaskUpdate(message: string): {
+  cleanMessage: string;
+  title?: string;
+  description?: string;
+  status?: string;
+} | null {
   const match = message.match(/<task_update>\s*([\s\S]*?)\s*<\/task_update>/i);
   if (!match) return null;
 
   try {
-    const parsed = JSON.parse(match[1]) as { title?: unknown; description?: unknown };
+    const parsed = JSON.parse(match[1]) as { title?: unknown; description?: unknown; status?: unknown };
+    const rawStatus = typeof parsed.status === "string" ? parsed.status.trim() : undefined;
     return {
       cleanMessage: message.replace(match[0], "").trim(),
       title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim() : undefined,
@@ -379,6 +448,7 @@ function extractTaskUpdate(message: string): { cleanMessage: string; title?: str
         typeof parsed.description === "string" && parsed.description.trim()
           ? parsed.description.trim()
           : undefined,
+      status: rawStatus && VALID_TASK_STATUSES.has(rawStatus) ? rawStatus : undefined,
     };
   } catch {
     return {
