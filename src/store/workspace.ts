@@ -114,6 +114,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const workspaces = await store.get<Workspace[]>("workspaces");
       const activeId = await store.get<string>("activeId");
 
+      // Load codex path
+      const codexPath = await store.get<string>("codexPath");
+      if (codexPath) set({ codexPath });
+
+      // Load yolo mode (defaults to true if never saved)
+      const yoloMode = await store.get<boolean>("yoloMode");
+      if (yoloMode !== null && yoloMode !== undefined) set({ yoloMode });
+
       if (workspaces && workspaces.length > 0) {
         const validActiveId = activeId && workspaces.find((w) => w.id === activeId)
           ? activeId
@@ -130,14 +138,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         set({ workspaces: [ws], activeId: legacyPath, projectPath: legacyPath });
         persist([ws], legacyPath);
       }
-
-      // Load codex path
-      const codexPath = await store.get<string>("codexPath");
-      if (codexPath) set({ codexPath });
-
-      // Load yolo mode (defaults to true if never saved)
-      const yoloMode = await store.get<boolean>("yoloMode");
-      if (yoloMode !== null && yoloMode !== undefined) set({ yoloMode });
     } catch {
       // First run
     }

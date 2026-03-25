@@ -291,7 +291,11 @@ export default function Settings() {
                         setEditingTemplate(template);
                         setShowAddForm(false);
                       }}
-                      onDelete={() => void removeTemplate(template.id)}
+                      onDelete={() => {
+                        if (window.confirm(`Delete template \"${template.title}\"? This cannot be undone.`)) {
+                          void removeTemplate(template.id);
+                        }
+                      }}
                     />
                   ))}
                   {customTemplates.length === 0 && !showAddForm && (
@@ -729,10 +733,28 @@ function TemplateEditor({
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [assignedAgentId, setAssignedAgentId] = useState<string | null>(initial?.assigned_agent_id ?? null);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!title.trim()) return;
-    await onSave({ title: title.trim(), description, assigned_agent_id: assignedAgentId });
+    if (!title.trim()) {
+      setTitleError("Title is required");
+      return;
+    }
+
+    setTitleError(null);
+    setIsSaving(true);
+
+    try {
+      await onSave({ title: title.trim(), description, assigned_agent_id: assignedAgentId });
+    } catch (err) {
+      setTitleError(
+        err instanceof Error ? err.message : "Failed to save template. Please try again."
+      );
+      return;
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -752,9 +774,17 @@ function TemplateEditor({
           className="input"
           placeholder="Template title…"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            if (titleError) setTitleError(null);
+          }}
         />
       </FieldRow>
+      {titleError && (
+        <div style={{ color: "var(--text-error)", fontSize: "var(--font-size-xs)" }}>
+          {titleError}
+        </div>
+      )}
       <FieldRow label="Description">
         <textarea
           className="input"
@@ -780,11 +810,11 @@ function TemplateEditor({
         </select>
       </FieldRow>
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn btn-primary" onClick={() => void handleSave()}>
+        <button className="btn btn-primary" onClick={() => void handleSave()} disabled={isSaving}>
           <Save size={12} />
-          Save
+          {isSaving ? "Saving..." : "Save"}
         </button>
-        <button className="btn btn-ghost" onClick={onCancel}>
+        <button className="btn btn-ghost" onClick={onCancel} disabled={isSaving}>
           Cancel
         </button>
       </div>

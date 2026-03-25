@@ -29,14 +29,61 @@ export default function TaskTemplateSuggestions({
   useEffect(() => {
     if (!visible) return;
 
-    const update = () => {
-      if (anchorRef.current) {
-        setRect(anchorRef.current.getBoundingClientRect());
+    const prevRectRef = { current: rect };
+
+    const rectsEqual = (a: DOMRect, b: DOMRect) =>
+      a.top === b.top &&
+      a.left === b.left &&
+      a.bottom === b.bottom &&
+      a.right === b.right &&
+      a.width === b.width &&
+      a.height === b.height;
+
+    const updateRect = () => {
+      const anchorEl = anchorRef.current;
+      if (!anchorEl) return;
+      const newRect = anchorEl.getBoundingClientRect();
+      if (!prevRectRef.current || !rectsEqual(prevRectRef.current, newRect)) {
+        prevRectRef.current = newRect;
+        setRect(newRect);
       }
-      frameRef.current = requestAnimationFrame(update);
     };
-    frameRef.current = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(frameRef.current);
+
+    const onScrollOrResize = () => updateRect();
+
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    updateRect();
+
+    let observer: ResizeObserver | null = null;
+    let mutationObserver: MutationObserver | null = null;
+
+    if (anchorRef.current && typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(updateRect);
+      observer.observe(anchorRef.current);
+    }
+
+    if (anchorRef.current && typeof MutationObserver !== "undefined") {
+      mutationObserver = new MutationObserver(updateRect);
+      mutationObserver.observe(anchorRef.current, { attributes: true, childList: true, subtree: true });
+    }
+
+    // Fallback RAF loop if no observer is available (and deprecated for perf)
+    if (!observer && !mutationObserver) {
+      const poll = () => {
+        updateRect();
+        frameRef.current = requestAnimationFrame(poll);
+      };
+      frameRef.current = requestAnimationFrame(poll);
+    }
+
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      if (observer) observer.disconnect();
+      if (mutationObserver) mutationObserver.disconnect();
+    };
   }, [visible, anchorRef]);
 
   if (!visible || !rect) return null;

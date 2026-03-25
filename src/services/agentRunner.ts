@@ -189,7 +189,33 @@ export async function startAgent(opts: StartAgentOptions): Promise<void> {
           JSON.stringify({ request_id: req.request_id, status: "accepted", decision: "accept" })
         ).catch(() => null);
         if (approvalEvent) addTaskEvent(approvalEvent);
-        client.respondToApproval(req.request_id, "accept");
+        try {
+          await client.respondToApproval(req.request_id, "accept");
+        } catch (err) {
+          console.error("Failed to auto-approve request", req.request_id, err);
+          const failEvent = await dbAddTaskEvent(
+            taskId,
+            workspaceId,
+            "approval",
+            `Auto-approve failed: ${String(err)}`,
+            agent.name,
+            JSON.stringify({ request_id: req.request_id, status: "failed", decision: "accept", error: String(err) })
+          ).catch(() => null);
+          if (failEvent) addTaskEvent(failEvent);
+          // Leave run paused so user can manually approve/reject.
+          await updateSessionStatus("paused");
+          onApprovalRequest?.(req, approvalEvent?.id ?? null);
+          addNotification({
+            kind: "approval_request",
+            taskId,
+            taskTitle: task.title,
+            agentName: agent.name,
+            content: `Auto-approve failed: ${String(err)}`,
+            sessionId: session.id,
+            requestId: req.request_id,
+          });
+          return;
+        }
         return;
       }
 

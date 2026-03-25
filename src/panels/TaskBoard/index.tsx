@@ -22,6 +22,9 @@ export default function TaskBoard() {
   const [suggestionIndex, setSuggestionIndex] = useState(-1);
   const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null);
   const allTemplates = useTemplatesStore((s) => s.allTemplates)();
+  const filteredTemplates = allTemplates.filter((t) =>
+    t.title.toLowerCase().includes(newTitle.trim().toLowerCase())
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -97,18 +100,15 @@ export default function TaskBoard() {
                 setSuggestionIndex(-1);
               }}
               onKeyDown={(e) => {
-                const filtered = allTemplates.filter((t) =>
-                  t.title.toLowerCase().includes(newTitle.toLowerCase())
-                );
                 if (e.key === "ArrowDown") {
                   e.preventDefault();
-                  setSuggestionIndex((i) => Math.min(i + 1, filtered.length - 1));
+                  setSuggestionIndex((i) => Math.min(i + 1, filteredTemplates.length - 1));
                 } else if (e.key === "ArrowUp") {
                   e.preventDefault();
                   setSuggestionIndex((i) => Math.max(i - 1, 0));
                 } else if (e.key === "Enter") {
-                  if (suggestionIndex >= 0 && filtered[suggestionIndex]) {
-                    handleTemplateSelect(filtered[suggestionIndex]);
+                  if (suggestionIndex >= 0 && filteredTemplates[suggestionIndex]) {
+                    handleTemplateSelect(filteredTemplates[suggestionIndex]);
                   } else {
                     void handleCreate();
                   }
@@ -123,7 +123,7 @@ export default function TaskBoard() {
             />
             <TaskTemplateSuggestions
               query={newTitle}
-              templates={allTemplates}
+              templates={filteredTemplates}
               selectedIndex={suggestionIndex}
               onSelect={handleTemplateSelect}
               anchorRef={inputRef}
