@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, Component};
 use std::process::Command;
 use serde::Serialize;
 
@@ -10,21 +10,31 @@ pub struct FsDirEntry {
     is_dir: bool,
 }
 
+fn is_path_safe(path: &str) -> Result<(), String> {
+    if Path::new(path).components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err("Security Error: Path traversal detected".to_string());
+    }
+    Ok(())
+}
+
 /// Check whether a path exists on disk.
 #[tauri::command]
-pub fn fs_exists(path: String) -> bool {
-    Path::new(&path).exists()
+pub fn fs_exists(path: String) -> Result<bool, String> {
+    is_path_safe(&path)?;
+    Ok(Path::new(&path).exists())
 }
 
 /// Read the text content of a file.
 #[tauri::command]
 pub fn fs_read_text(path: String) -> Result<String, String> {
+    is_path_safe(&path)?;
     fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
 /// Write text to a file, creating it (and parent dirs) if necessary.
 #[tauri::command]
 pub fn fs_write_text(path: String, content: String) -> Result<(), String> {
+    is_path_safe(&path)?;
     if let Some(parent) = Path::new(&path).parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -34,12 +44,14 @@ pub fn fs_write_text(path: String, content: String) -> Result<(), String> {
 /// Create a directory (and all parents).
 #[tauri::command]
 pub fn fs_mkdir(path: String) -> Result<(), String> {
+    is_path_safe(&path)?;
     fs::create_dir_all(&path).map_err(|e| e.to_string())
 }
 
 /// List a directory's direct children.
 #[tauri::command]
 pub fn fs_list_dir(path: String) -> Result<Vec<FsDirEntry>, String> {
+    is_path_safe(&path)?;
     let entries = fs::read_dir(&path).map_err(|e| e.to_string())?;
     let mut result = Vec::new();
 
@@ -60,6 +72,7 @@ pub fn fs_list_dir(path: String) -> Result<Vec<FsDirEntry>, String> {
 /// Open a path in VS Code using the macOS `open` command.
 #[tauri::command]
 pub fn open_in_vscode(path: String) -> Result<(), String> {
+    is_path_safe(&path)?;
     Command::new("/usr/bin/open")
         .args(["-a", "Visual Studio Code", &path])
         .spawn()
