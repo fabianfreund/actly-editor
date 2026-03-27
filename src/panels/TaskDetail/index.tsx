@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Paperclip, Link, X, Plus, MessageSquare, GitCommit, AlertCircle, Clock, ArrowRight, RotateCcw, Trash2, Play } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -628,7 +628,9 @@ export default function TaskDetail() {
   );
 }
 
-function TimelineEvent({
+// Wrap TimelineEvent in React.memo to prevent unnecessary re-renders of expensive historical events
+// Expected impact: Reduces CPU overhead and re-renders when task state changes or user interacts with the thread
+const TimelineEvent = memo(function TimelineEvent({
   event,
   rootPath,
   codexPort,
@@ -825,4 +827,4 @@ function TimelineEvent({
       </div>
     </div>
   );
-}
+});
