@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Play } from "lucide-react";
 import { ApprovalCard, type ApprovalState } from "../../components/ApprovalCard";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -86,16 +86,27 @@ export default function AgentThread() {
     });
   };
 
-  const handleApprovalDecision = async (requestId: string, decision: ApprovalDecision) => {
+  const handleApprovalDecision = useCallback(async (requestId: string, decision: ApprovalDecision) => {
+    const { codexPort, activeTaskId } = useWorkspaceStore.getState();
+    const { sessions, setSessions } = useAgentsStore.getState();
+    const activeSession = sessions
+      .filter((s) => s.task_id === activeTaskId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+
     if (!codexPort || !activeSession || !activeTaskId) return;
+
     const client = await getCodexClient(codexPort);
     client.respondToApproval(requestId, decision);
     await dbUpdateSession(activeSession.id, { status: "running" });
+
+    // We fetch sessions again in case it was updated during await
+    const currentSessions = useAgentsStore.getState().sessions;
     setSessions(
-      sessions.map((session) =>
+      currentSessions.map((session) =>
         session.id === activeSession.id ? { ...session, status: "running" } : session
       )
     );
+
     useAgentsStore.getState().addEvent(activeSession.id, {
       id: `${Date.now()}-${Math.random()}`,
       session_id: activeSession.id,
@@ -103,22 +114,29 @@ export default function AgentThread() {
       payload: { request_id: requestId, decision },
       received_at: new Date().toISOString(),
     });
-    // Update the existing pending approval task event instead of creating a second one
-    if (pendingApprovalEventId) {
-      const resolved: ApprovalState =
-        decision === "accept" ? "accepted" :
-        decision === "acceptForSession" ? "alwaysApproved" : "declined";
-      const metadata = JSON.stringify({ request_id: requestId, status: resolved, decision });
-      await dbUpdateTaskEventMetadata(pendingApprovalEventId, metadata).catch(() => {});
-      const { events } = useTasksStore.getState();
-      const existing = (events[activeTaskId] ?? []).find((e) => e.id === pendingApprovalEventId);
-      if (existing) updateEvent({ ...existing, metadata });
-    }
-    if (pendingApproval?.request_id === requestId) {
-      setPendingApproval(null);
-      setPendingApprovalEventId(null);
-    }
-  };
+
+    // Check pending approval event ID and request from current state since this is async/callback
+    setPendingApprovalEventId((currentPendingApprovalEventId) => {
+      setPendingApproval((currentPendingApproval) => {
+        if (currentPendingApprovalEventId) {
+          const resolved: ApprovalState =
+            decision === "accept" ? "accepted" :
+            decision === "acceptForSession" ? "alwaysApproved" : "declined";
+          const metadata = JSON.stringify({ request_id: requestId, status: resolved, decision });
+          dbUpdateTaskEventMetadata(currentPendingApprovalEventId, metadata).catch(() => {});
+          const { events, updateEvent } = useTasksStore.getState();
+          const existing = (events[activeTaskId] ?? []).find((e) => e.id === currentPendingApprovalEventId);
+          if (existing) updateEvent({ ...existing, metadata });
+        }
+
+        if (currentPendingApproval?.request_id === requestId) {
+          return null; // clears pendingApproval
+        }
+        return currentPendingApproval;
+      });
+      return null; // clears pendingApprovalEventId
+    });
+  }, []);
 
   if (!activeTaskId || !task) {
     return (
@@ -382,7 +400,7 @@ function buildDisplayEvents(events: { id: string; type: string; payload: unknown
   return display;
 }
 
-function EventBubble({
+const EventBubble = React.memo(function EventBubble({
   event,
   rootPath,
   onApprovalDecision,
@@ -453,4 +471,4 @@ function EventBubble({
       <FormattedText text={content} rootPath={rootPath} />
     </div>
   );
-}
+});
