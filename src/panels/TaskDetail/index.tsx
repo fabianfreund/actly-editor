@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Paperclip, Link, X, Plus, MessageSquare, GitCommit, AlertCircle, Clock, ArrowRight, RotateCcw, Trash2, Play } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -628,7 +628,7 @@ export default function TaskDetail() {
   );
 }
 
-function TimelineEvent({
+const TimelineEvent = React.memo(function TimelineEvent({
   event,
   rootPath,
   codexPort,
@@ -825,4 +825,4 @@ function TimelineEvent({
       </div>
     </div>
   );
-}
+})
