@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Play } from "lucide-react";
 import { ApprovalCard, type ApprovalState } from "../../components/ApprovalCard";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -86,7 +86,7 @@ export default function AgentThread() {
     });
   };
 
-  const handleApprovalDecision = async (requestId: string, decision: ApprovalDecision) => {
+  const handleApprovalDecision = useCallback(async (requestId: string, decision: ApprovalDecision) => {
     if (!codexPort || !activeSession || !activeTaskId) return;
     const client = await getCodexClient(codexPort);
     client.respondToApproval(requestId, decision);
@@ -118,7 +118,7 @@ export default function AgentThread() {
       setPendingApproval(null);
       setPendingApprovalEventId(null);
     }
-  };
+  }, [codexPort, activeSession, activeTaskId, sessions, pendingApprovalEventId, pendingApproval, setSessions, updateEvent]);
 
   if (!activeTaskId || !task) {
     return (
@@ -382,7 +382,7 @@ function buildDisplayEvents(events: { id: string; type: string; payload: unknown
   return display;
 }
 
-function EventBubble({
+const EventBubble = React.memo(function EventBubble({
   event,
   rootPath,
   onApprovalDecision,
@@ -453,4 +453,4 @@ function EventBubble({
       <FormattedText text={content} rootPath={rootPath} />
     </div>
   );
-}
+})
