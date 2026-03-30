@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Play } from "lucide-react";
 import { ApprovalCard, type ApprovalState } from "../../components/ApprovalCard";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -382,7 +382,11 @@ function buildDisplayEvents(events: { id: string; type: string; payload: unknown
   return display;
 }
 
-function EventBubble({
+// ⚡ Bolt Optimization:
+// Wrapped EventBubble in React.memo() to prevent unnecessary re-renders of all historical
+// events when the AgentThread parent component updates rapidly (e.g., during keystrokes in text inputs).
+// This prevents expensive markdown re-rendering and improves UI responsiveness.
+const EventBubble = React.memo(function EventBubble({
   event,
   rootPath,
   onApprovalDecision,
@@ -453,4 +457,4 @@ function EventBubble({
       <FormattedText text={content} rootPath={rootPath} />
     </div>
   );
-}
+});
