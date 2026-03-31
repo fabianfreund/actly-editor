@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Paperclip, Link, X, Plus, MessageSquare, GitCommit, AlertCircle, Clock, ArrowRight, RotateCcw, Trash2, Play } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -535,7 +535,6 @@ export default function TaskDetail() {
                   event={event}
                   rootPath={projectPath}
                   codexPort={codexPort}
-                  sessions={sessions}
                   activeTaskId={activeTaskId}
                   onEventUpdated={updateEvent}
                 />
@@ -628,18 +627,16 @@ export default function TaskDetail() {
   );
 }
 
-function TimelineEvent({
+const TimelineEvent = memo(function TimelineEvent({
   event,
   rootPath,
   codexPort,
-  sessions,
   activeTaskId,
   onEventUpdated,
 }: {
   event: TaskEvent;
   rootPath?: string | null;
   codexPort: number | null;
-  sessions: import("../../store/agents").Session[];
   activeTaskId: string | null;
   onEventUpdated: (updated: TaskEvent) => void;
 }) {
@@ -672,7 +669,8 @@ function TimelineEvent({
         client.respondToApproval(requestId, decision);
         // Resume active session
         const { dbUpdateSession } = await import("../../services/db");
-        const activeSession = sessions.filter((s) => s.task_id === activeTaskId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+        const currentSessions = useAgentsStore.getState().sessions;
+        const activeSession = currentSessions.filter((s) => s.task_id === activeTaskId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
         if (activeSession) await dbUpdateSession(activeSession.id, { status: "running" }).catch(() => {});
       } catch (e) {
         console.error("Failed to respond to approval:", e);
@@ -825,4 +823,4 @@ function TimelineEvent({
       </div>
     </div>
   );
-}
+});
