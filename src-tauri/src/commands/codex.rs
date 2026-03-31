@@ -13,9 +13,28 @@ fn find_free_port() -> u16 {
     listener.local_addr().unwrap().port()
 }
 
+/// Prevents arbitrary code execution by ensuring the user-provided binary path
+/// actually points to the expected 'codex' executable, rather than a system shell
+/// like 'bash' or 'cmd.exe'.
+fn validate_codex_bin(bin: &str) -> Result<(), String> {
+    let lower = bin.to_lowercase();
+    let is_valid = lower == "codex"
+        || lower == "codex.exe"
+        || lower.ends_with("/codex")
+        || lower.ends_with("\\codex")
+        || lower.ends_with("/codex.exe")
+        || lower.ends_with("\\codex.exe");
+
+    if !is_valid {
+        return Err("Invalid codex path: executable must be named 'codex' or 'codex.exe'".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn check_codex_path(path: Option<String>) -> Result<String, String> {
     let bin = path.as_deref().filter(|s| !s.is_empty()).unwrap_or("codex");
+    validate_codex_bin(bin)?;
     let output = Command::new(bin)
         .arg("--version")
         .output()
@@ -48,6 +67,7 @@ pub async fn start_codex_server(
     let port = find_free_port();
     let addr = format!("ws://127.0.0.1:{port}");
     let bin = codex_path.as_deref().filter(|s| !s.is_empty()).unwrap_or("codex");
+    validate_codex_bin(bin)?;
 
     eprintln!(
         "[actly/codex] starting session={} bin={} cwd={} listen={}",
