@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Play } from "lucide-react";
 import { ApprovalCard, type ApprovalState } from "../../components/ApprovalCard";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -28,7 +28,7 @@ export default function AgentThread() {
   const selectedAgent = agents.find((agent) => agent.id === activeSession?.agent_id);
   const sessionEvents = activeSession ? (events[activeSession.id] ?? []) : [];
   const runState = task ? getTaskRunState(task, sessions) : null;
-  const displayEvents = buildDisplayEvents(sessionEvents);
+  const displayEvents = useMemo(() => buildDisplayEvents(sessionEvents), [sessionEvents]);
 
   useEffect(() => {
     dbListAgents().then(setAgents).catch(console.error);
@@ -86,16 +86,25 @@ export default function AgentThread() {
     });
   };
 
-  const handleApprovalDecision = async (requestId: string, decision: ApprovalDecision) => {
+  const handleApprovalDecision = useCallback(async (requestId: string, decision: ApprovalDecision) => {
+    const { codexPort, activeTaskId } = useWorkspaceStore.getState();
+    const { sessions } = useAgentsStore.getState();
+    const activeSession = sessions
+      .filter((s) => s.task_id === activeTaskId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+
     if (!codexPort || !activeSession || !activeTaskId) return;
     const client = await getCodexClient(codexPort);
     client.respondToApproval(requestId, decision);
     await dbUpdateSession(activeSession.id, { status: "running" });
-    setSessions(
-      sessions.map((session) =>
+
+    // Refresh sessions instead of using stale state
+    useAgentsStore.getState().setSessions(
+      useAgentsStore.getState().sessions.map((session) =>
         session.id === activeSession.id ? { ...session, status: "running" } : session
       )
     );
+
     useAgentsStore.getState().addEvent(activeSession.id, {
       id: `${Date.now()}-${Math.random()}`,
       session_id: activeSession.id,
@@ -103,6 +112,7 @@ export default function AgentThread() {
       payload: { request_id: requestId, decision },
       received_at: new Date().toISOString(),
     });
+
     // Update the existing pending approval task event instead of creating a second one
     if (pendingApprovalEventId) {
       const resolved: ApprovalState =
@@ -110,15 +120,14 @@ export default function AgentThread() {
         decision === "acceptForSession" ? "alwaysApproved" : "declined";
       const metadata = JSON.stringify({ request_id: requestId, status: resolved, decision });
       await dbUpdateTaskEventMetadata(pendingApprovalEventId, metadata).catch(() => {});
-      const { events } = useTasksStore.getState();
+      const { events, updateEvent } = useTasksStore.getState();
       const existing = (events[activeTaskId] ?? []).find((e) => e.id === pendingApprovalEventId);
       if (existing) updateEvent({ ...existing, metadata });
     }
-    if (pendingApproval?.request_id === requestId) {
-      setPendingApproval(null);
-      setPendingApprovalEventId(null);
-    }
-  };
+
+    setPendingApproval((prev) => prev?.request_id === requestId ? null : prev);
+    setPendingApprovalEventId((prev) => pendingApproval?.request_id === requestId ? null : prev);
+  }, [pendingApprovalEventId, pendingApproval?.request_id]);
 
   if (!activeTaskId || !task) {
     return (
@@ -382,7 +391,7 @@ function buildDisplayEvents(events: { id: string; type: string; payload: unknown
   return display;
 }
 
-function EventBubble({
+const EventBubble = React.memo(function EventBubble({
   event,
   rootPath,
   onApprovalDecision,
@@ -453,4 +462,4 @@ function EventBubble({
       <FormattedText text={content} rootPath={rootPath} />
     </div>
   );
-}
+});
