@@ -13,9 +13,24 @@ fn find_free_port() -> u16 {
     listener.local_addr().unwrap().port()
 }
 
+fn is_valid_codex_bin(bin: &str) -> bool {
+    let lower = bin.to_lowercase();
+    lower == "codex"
+        || lower == "codex.exe"
+        || lower.ends_with("/codex")
+        || lower.ends_with("/codex.exe")
+        || lower.ends_with("\\codex")
+        || lower.ends_with("\\codex.exe")
+}
+
 #[tauri::command]
 pub async fn check_codex_path(path: Option<String>) -> Result<String, String> {
     let bin = path.as_deref().filter(|s| !s.is_empty()).unwrap_or("codex");
+
+    if !is_valid_codex_bin(bin) {
+        return Err("Invalid codex executable path provided. Path must end with 'codex' or 'codex.exe'.".to_string());
+    }
+
     let output = Command::new(bin)
         .arg("--version")
         .output()
@@ -48,6 +63,10 @@ pub async fn start_codex_server(
     let port = find_free_port();
     let addr = format!("ws://127.0.0.1:{port}");
     let bin = codex_path.as_deref().filter(|s| !s.is_empty()).unwrap_or("codex");
+
+    if !is_valid_codex_bin(bin) {
+        return Err("Invalid codex executable path provided. Path must end with 'codex' or 'codex.exe'.".to_string());
+    }
 
     eprintln!(
         "[actly/codex] starting session={} bin={} cwd={} listen={}",
