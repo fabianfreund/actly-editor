@@ -1,3 +1,7 @@
 ## 2026-03-23 - Prevented Unnecessary Re-Renders in TaskBoard List Items
 **Learning:** React list rendering in the Kanban Board can get expensive when local state inputs (like "New Task Title" input fields) trigger re-renders on every keystroke. Using inline arrow functions for callbacks (like \`onClick={() => onClick(task.id)}\`) on list items causes them to fail shallow equality checks in `React.memo()`.
 **Action:** Stabilized callback functions in list parent components using \`useCallback\`, updated child components to accept raw identifiers instead of wrapper functions for events, and wrapped the child list item components in \`React.memo()\` to effectively decouple them from the parent's generic state updates.
+
+## 2026-03-23 - Prevented Unnecessary Re-Renders in Activity/Chat Feed Components
+**Learning:** Failing to memoize historical feed components (like `TimelineEvent` and `EventBubble`) that render expensive markdown causes severe input latency during rapid state updates. Typing in comment or description fields triggers re-renders of the entire history list, which is computationally expensive because of the deep structure and complex markdown rendering logic in `FormattedText`.
+**Action:** Wrapped `TimelineEvent` and `EventBubble` in `React.memo()`. Also ensured that complex derived state like `buildDisplayEvents` is memoized with `useMemo`, and callbacks like `handleApprovalDecision` are stabilized with `useCallback` to prevent the feed components from failing shallow equality checks during parent component renders.
