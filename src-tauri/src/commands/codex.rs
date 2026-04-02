@@ -13,9 +13,22 @@ fn find_free_port() -> u16 {
     listener.local_addr().unwrap().port()
 }
 
+fn validate_codex_bin(bin: &str) -> Result<(), String> {
+    // Basic normalization for Windows paths to allow Path to extract file name properly on Linux/Unix systems if cross-platform paths are tested
+    let normalized = bin.replace('\\', "/");
+    let path = std::path::Path::new(&normalized);
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let lower_name = file_name.to_lowercase();
+    if lower_name != "codex" && lower_name != "codex.exe" {
+        return Err(format!("Security Violation: Executable name must be 'codex' or 'codex.exe', got '{}'", file_name));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn check_codex_path(path: Option<String>) -> Result<String, String> {
     let bin = path.as_deref().filter(|s| !s.is_empty()).unwrap_or("codex");
+    validate_codex_bin(bin)?;
     let output = Command::new(bin)
         .arg("--version")
         .output()
@@ -48,6 +61,7 @@ pub async fn start_codex_server(
     let port = find_free_port();
     let addr = format!("ws://127.0.0.1:{port}");
     let bin = codex_path.as_deref().filter(|s| !s.is_empty()).unwrap_or("codex");
+    validate_codex_bin(bin)?;
 
     eprintln!(
         "[actly/codex] starting session={} bin={} cwd={} listen={}",
@@ -123,4 +137,24 @@ pub fn get_codex_port(
 pub fn debug_log(message: String) -> Result<(), String> {
     eprintln!("[actly/frontend] {}", message);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_codex_bin_success() {
+        assert!(validate_codex_bin("codex").is_ok());
+        assert!(validate_codex_bin("codex.exe").is_ok());
+        assert!(validate_codex_bin("/usr/bin/codex").is_ok());
+        assert!(validate_codex_bin("C:\\Program Files\\codex.exe").is_ok());
+    }
+
+    #[test]
+    fn test_validate_codex_bin_failure() {
+        assert!(validate_codex_bin("/bin/bash").is_err());
+        assert!(validate_codex_bin("codex_test").is_err());
+        assert!(validate_codex_bin("my_malicious_script").is_err());
+    }
 }
