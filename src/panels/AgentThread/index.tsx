@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, memo } from "react";
 import { Play } from "lucide-react";
 import { ApprovalCard, type ApprovalState } from "../../components/ApprovalCard";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -28,7 +28,23 @@ export default function AgentThread() {
   const selectedAgent = agents.find((agent) => agent.id === activeSession?.agent_id);
   const sessionEvents = activeSession ? (events[activeSession.id] ?? []) : [];
   const runState = task ? getTaskRunState(task, sessions) : null;
-  const displayEvents = buildDisplayEvents(sessionEvents);
+  // ⚡ Bolt Optimization: Memoize displayEvents to prevent unnecessary recreations and maintain referential stability for React.memo
+  const displayEvents = useMemo(() => buildDisplayEvents(sessionEvents), [sessionEvents]);
+
+  // ⚡ Bolt Optimization: Use refs to access latest local state without adding them to callback dependency arrays, preventing recreation
+  const pendingApprovalRef = useRef(pendingApproval);
+  const pendingApprovalEventIdRef = useRef(pendingApprovalEventId);
+  const activeSessionRef = useRef(activeSession);
+  const activeTaskIdRef = useRef(activeTaskId);
+  const sessionsRef = useRef(sessions);
+
+  useEffect(() => {
+    pendingApprovalRef.current = pendingApproval;
+    pendingApprovalEventIdRef.current = pendingApprovalEventId;
+    activeSessionRef.current = activeSession;
+    activeTaskIdRef.current = activeTaskId;
+    sessionsRef.current = sessions;
+  }, [pendingApproval, pendingApprovalEventId, activeSession, activeTaskId, sessions]);
 
   useEffect(() => {
     dbListAgents().then(setAgents).catch(console.error);
@@ -86,13 +102,20 @@ export default function AgentThread() {
     });
   };
 
-  const handleApprovalDecision = async (requestId: string, decision: ApprovalDecision) => {
+  // ⚡ Bolt Optimization: Stabilize callback with useCallback, refs, and Zustand's .getState() to decouple from parent re-renders
+  const handleApprovalDecision = useCallback(async (requestId: string, decision: ApprovalDecision) => {
+    const { codexPort } = useWorkspaceStore.getState();
+    const activeSession = activeSessionRef.current;
+    const activeTaskId = activeTaskIdRef.current;
+    const pendingApprovalEventId = pendingApprovalEventIdRef.current;
+    const pendingApproval = pendingApprovalRef.current;
+
     if (!codexPort || !activeSession || !activeTaskId) return;
     const client = await getCodexClient(codexPort);
     client.respondToApproval(requestId, decision);
     await dbUpdateSession(activeSession.id, { status: "running" });
     setSessions(
-      sessions.map((session) =>
+      sessionsRef.current.map((session) =>
         session.id === activeSession.id ? { ...session, status: "running" } : session
       )
     );
@@ -110,15 +133,15 @@ export default function AgentThread() {
         decision === "acceptForSession" ? "alwaysApproved" : "declined";
       const metadata = JSON.stringify({ request_id: requestId, status: resolved, decision });
       await dbUpdateTaskEventMetadata(pendingApprovalEventId, metadata).catch(() => {});
-      const { events } = useTasksStore.getState();
-      const existing = (events[activeTaskId] ?? []).find((e) => e.id === pendingApprovalEventId);
-      if (existing) updateEvent({ ...existing, metadata });
+      const tasksStore = useTasksStore.getState();
+      const existing = (tasksStore.events[activeTaskId] ?? []).find((e) => e.id === pendingApprovalEventId);
+      if (existing) tasksStore.updateEvent({ ...existing, metadata });
     }
     if (pendingApproval?.request_id === requestId) {
       setPendingApproval(null);
       setPendingApprovalEventId(null);
     }
-  };
+  }, []);
 
   if (!activeTaskId || !task) {
     return (
@@ -382,7 +405,8 @@ function buildDisplayEvents(events: { id: string; type: string; payload: unknown
   return display;
 }
 
-function EventBubble({
+// ⚡ Bolt Optimization: Wrap expensive list item in React.memo to prevent re-renders on every keystroke/token stream
+const EventBubble = memo(function EventBubble({
   event,
   rootPath,
   onApprovalDecision,
@@ -453,4 +477,4 @@ function EventBubble({
       <FormattedText text={content} rootPath={rootPath} />
     </div>
   );
-}
+});

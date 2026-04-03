@@ -1,3 +1,7 @@
 ## 2026-03-23 - Prevented Unnecessary Re-Renders in TaskBoard List Items
 **Learning:** React list rendering in the Kanban Board can get expensive when local state inputs (like "New Task Title" input fields) trigger re-renders on every keystroke. Using inline arrow functions for callbacks (like \`onClick={() => onClick(task.id)}\`) on list items causes them to fail shallow equality checks in `React.memo()`.
 **Action:** Stabilized callback functions in list parent components using \`useCallback\`, updated child components to accept raw identifiers instead of wrapper functions for events, and wrapped the child list item components in \`React.memo()\` to effectively decouple them from the parent's generic state updates.
+
+## 2026-03-23 - Prevented Unnecessary Re-Renders in AgentThread EventBubbles
+**Learning:** During rapid local state updates (like token streaming from an agent or typing in the chat input), rendering a long list of historical events with markdown parsing in \`EventBubble\` can cause significant performance degradation. If list items or their props aren't properly memoized, they re-render on every parent update.
+**Action:** Stabilized callback functions in parent components using \`useCallback\` combined with Zustand's \`.getState()\` and \`useRef\` (to avoid adding volatile states to the dependency array). Wrapped the \`displayEvents\` derivation in \`useMemo()\` to maintain referential stability. Finally, wrapped the expensive \`EventBubble\` list item component in \`React.memo()\` to decouple it from parent re-renders.
