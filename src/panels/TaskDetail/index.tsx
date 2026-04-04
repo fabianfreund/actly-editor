@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Paperclip, Link, X, Plus, MessageSquare, GitCommit, AlertCircle, Clock, ArrowRight, RotateCcw, Trash2, Play } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -92,8 +92,12 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 export default function TaskDetail() {
   const { activeId, activeTaskId, projectPath, codexPath, codexPort, setActiveTaskId } = useWorkspaceStore();
-  const { tasks, events, attachments, setTasks, setEvents, addEvent, updateEvent, upsertTask, removeTask, setAttachments, addAttachment, removeAttachment } = useTasksStore();
+  const { tasks, events, attachments, setTasks, setEvents, addEvent, updateEvent: rawUpdateEvent, upsertTask, removeTask, setAttachments, addAttachment, removeAttachment } = useTasksStore();
   const { agents, sessions, setAgents, setSessions } = useAgentsStore();
+
+  const updateEvent = useCallback((event: TaskEvent) => {
+    rawUpdateEvent(event);
+  }, [rawUpdateEvent]);
 
   const task = tasks.find((t) => t.id === activeTaskId);
   const taskEvents = activeTaskId ? (events[activeTaskId] ?? []) : [];
@@ -535,7 +539,6 @@ export default function TaskDetail() {
                   event={event}
                   rootPath={projectPath}
                   codexPort={codexPort}
-                  sessions={sessions}
                   activeTaskId={activeTaskId}
                   onEventUpdated={updateEvent}
                 />
@@ -628,18 +631,16 @@ export default function TaskDetail() {
   );
 }
 
-function TimelineEvent({
+const TimelineEvent = React.memo(function TimelineEvent({
   event,
   rootPath,
   codexPort,
-  sessions,
   activeTaskId,
   onEventUpdated,
 }: {
   event: TaskEvent;
   rootPath?: string | null;
   codexPort: number | null;
-  sessions: import("../../store/agents").Session[];
   activeTaskId: string | null;
   onEventUpdated: (updated: TaskEvent) => void;
 }) {
@@ -672,6 +673,7 @@ function TimelineEvent({
         client.respondToApproval(requestId, decision);
         // Resume active session
         const { dbUpdateSession } = await import("../../services/db");
+        const { sessions } = useAgentsStore.getState();
         const activeSession = sessions.filter((s) => s.task_id === activeTaskId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
         if (activeSession) await dbUpdateSession(activeSession.id, { status: "running" }).catch(() => {});
       } catch (e) {
@@ -825,4 +827,4 @@ function TimelineEvent({
       </div>
     </div>
   );
-}
+});

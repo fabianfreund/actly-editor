@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Play } from "lucide-react";
 import { ApprovalCard, type ApprovalState } from "../../components/ApprovalCard";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -28,7 +28,7 @@ export default function AgentThread() {
   const selectedAgent = agents.find((agent) => agent.id === activeSession?.agent_id);
   const sessionEvents = activeSession ? (events[activeSession.id] ?? []) : [];
   const runState = task ? getTaskRunState(task, sessions) : null;
-  const displayEvents = buildDisplayEvents(sessionEvents);
+  const displayEvents = useMemo(() => buildDisplayEvents(sessionEvents), [sessionEvents]);
 
   useEffect(() => {
     dbListAgents().then(setAgents).catch(console.error);
@@ -86,7 +86,15 @@ export default function AgentThread() {
     });
   };
 
-  const handleApprovalDecision = async (requestId: string, decision: ApprovalDecision) => {
+  const handleApprovalDecision = useCallback(async (requestId: string, decision: ApprovalDecision) => {
+    const { codexPort, activeTaskId } = useWorkspaceStore.getState();
+    const { sessions, setSessions, addEvent } = useAgentsStore.getState();
+    const { events, updateEvent } = useTasksStore.getState();
+
+    const activeSession = sessions
+      .filter((s) => s.task_id === activeTaskId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+
     if (!codexPort || !activeSession || !activeTaskId) return;
     const client = await getCodexClient(codexPort);
     client.respondToApproval(requestId, decision);
@@ -96,7 +104,7 @@ export default function AgentThread() {
         session.id === activeSession.id ? { ...session, status: "running" } : session
       )
     );
-    useAgentsStore.getState().addEvent(activeSession.id, {
+    addEvent(activeSession.id, {
       id: `${Date.now()}-${Math.random()}`,
       session_id: activeSession.id,
       type: "approval_resolved",
@@ -104,21 +112,27 @@ export default function AgentThread() {
       received_at: new Date().toISOString(),
     });
     // Update the existing pending approval task event instead of creating a second one
-    if (pendingApprovalEventId) {
-      const resolved: ApprovalState =
-        decision === "accept" ? "accepted" :
-        decision === "acceptForSession" ? "alwaysApproved" : "declined";
-      const metadata = JSON.stringify({ request_id: requestId, status: resolved, decision });
-      await dbUpdateTaskEventMetadata(pendingApprovalEventId, metadata).catch(() => {});
-      const { events } = useTasksStore.getState();
-      const existing = (events[activeTaskId] ?? []).find((e) => e.id === pendingApprovalEventId);
-      if (existing) updateEvent({ ...existing, metadata });
-    }
-    if (pendingApproval?.request_id === requestId) {
-      setPendingApproval(null);
-      setPendingApprovalEventId(null);
-    }
-  };
+    setPendingApprovalEventId((currentEventId) => {
+      if (currentEventId) {
+        const resolved: ApprovalState =
+          decision === "accept" ? "accepted" :
+          decision === "acceptForSession" ? "alwaysApproved" : "declined";
+        const metadata = JSON.stringify({ request_id: requestId, status: resolved, decision });
+        dbUpdateTaskEventMetadata(currentEventId, metadata).catch(() => {});
+        const existing = (events[activeTaskId] ?? []).find((e) => e.id === currentEventId);
+        if (existing) updateEvent({ ...existing, metadata });
+      }
+      return currentEventId;
+    });
+
+    setPendingApproval((currentApproval) => {
+      if (currentApproval?.request_id === requestId) {
+        setPendingApprovalEventId(null);
+        return null;
+      }
+      return currentApproval;
+    });
+  }, []);
 
   if (!activeTaskId || !task) {
     return (
@@ -382,7 +396,7 @@ function buildDisplayEvents(events: { id: string; type: string; payload: unknown
   return display;
 }
 
-function EventBubble({
+const EventBubble = React.memo(function EventBubble({
   event,
   rootPath,
   onApprovalDecision,
@@ -453,4 +467,4 @@ function EventBubble({
       <FormattedText text={content} rootPath={rootPath} />
     </div>
   );
-}
+});
