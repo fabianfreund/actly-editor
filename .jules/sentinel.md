@@ -1,0 +1,5 @@
+
+## $(date +%Y-%m-%d) - Command Execution Path Vulnerability
+**Vulnerability:** The application executed a user-provided executable path for starting the Codex server without strictly verifying the executable name, relying potentially on the assumption that valid paths are safe. Maliciously constructed paths where a directory name matches the expected binary (e.g., `codex/malicious_bin`) could bypass naive `.ends_with` suffix checks on some platforms.
+**Learning:** When starting external processes with user-provided paths, simply checking the end of a string is insufficient and cross-platform path handling (like Windows `\` vs Unix `/`) complicates reliable extraction of the true executable file name.
+**Prevention:** Strictly extract the file name using platform-aware path parsing (e.g., normalising backslashes to forward slashes before `std::path::Path::new(...).file_name()`), and verify the file name exactly matches the expected binary name (`codex` or `codex.exe`) before passing the path to `Command::new()`.
