@@ -1,0 +1,4 @@
+## 2024-05-18 - Arbitrary Executable Execution Bypass in Tauri Command Path Validation
+**Vulnerability:** The application executed arbitrary binaries because user-provided executable paths to `tokio::process::Command::new(bin)` were not strictly validated. Checking only suffix endings like `ends_with("codex")` can be bypassed by maliciously named directories (e.g., `/path/to/malicious_codex`).
+**Learning:** Cross-platform path validation must normalize Windows-style backslashes (e.g., `replace('\\', '/')`) before using `std::path::Path::new` in Rust on Linux/Unix systems, otherwise `file_name()` extraction might fail and lead to security validation bypasses.
+**Prevention:** Strictly validate external binary executable names using `std::path::Path::new(&normalized).file_name()`, comparing it exactly against the expected binary names (`codex` or `codex.exe`), and reject any mismatch before passing to `Command::new()`.
