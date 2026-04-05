@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Paperclip, Link, X, Plus, MessageSquare, GitCommit, AlertCircle, Clock, ArrowRight, RotateCcw, Trash2, Play } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspaceStore } from "../../store/workspace";
@@ -535,7 +535,6 @@ export default function TaskDetail() {
                   event={event}
                   rootPath={projectPath}
                   codexPort={codexPort}
-                  sessions={sessions}
                   activeTaskId={activeTaskId}
                   onEventUpdated={updateEvent}
                 />
@@ -628,21 +627,20 @@ export default function TaskDetail() {
   );
 }
 
-function TimelineEvent({
+const TimelineEvent = memo(function TimelineEvent({
   event,
   rootPath,
   codexPort,
-  sessions,
   activeTaskId,
   onEventUpdated,
 }: {
   event: TaskEvent;
   rootPath?: string | null;
   codexPort: number | null;
-  sessions: import("../../store/agents").Session[];
   activeTaskId: string | null;
   onEventUpdated: (updated: TaskEvent) => void;
 }) {
+  const sessions = useAgentsStore((s) => s.sessions);
   // ── Status divider ────────────────────────────────────────────────────────
   if (event.type === "state_change" && event.content.startsWith("Moved to ")) {
     return (
@@ -825,4 +823,4 @@ function TimelineEvent({
       </div>
     </div>
   );
-}
+});
