@@ -13,9 +13,24 @@ fn find_free_port() -> u16 {
     listener.local_addr().unwrap().port()
 }
 
+fn validate_codex_path(path: &str) -> Result<(), String> {
+    let path_str = path.replace('\\', "/");
+    let file_name = std::path::Path::new(&path_str)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+
+    if file_name != "codex" && file_name != "codex.exe" {
+        return Err("Invalid codex path: executable must be named 'codex' or 'codex.exe'".to_string());
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn check_codex_path(path: Option<String>) -> Result<String, String> {
     let bin = path.as_deref().filter(|s| !s.is_empty()).unwrap_or("codex");
+    validate_codex_path(bin)?;
     let output = Command::new(bin)
         .arg("--version")
         .output()
@@ -48,6 +63,8 @@ pub async fn start_codex_server(
     let port = find_free_port();
     let addr = format!("ws://127.0.0.1:{port}");
     let bin = codex_path.as_deref().filter(|s| !s.is_empty()).unwrap_or("codex");
+
+    validate_codex_path(bin)?;
 
     eprintln!(
         "[actly/codex] starting session={} bin={} cwd={} listen={}",
